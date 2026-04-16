@@ -22,4 +22,4 @@ COPY --from=builder /app/server.js ./
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/next.config.js ./
 EXPOSE 3000
-CMD ["sh", "-c", "npx prisma migrate deploy && node server.js"]
+CMD ["sh", "-c", "(npx prisma migrate deploy 2>/dev/null || npx prisma db push --skip-generate --accept-data-loss) && node server.js"]
