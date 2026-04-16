@@ -4,7 +4,7 @@ RUN apt-get update && apt-get install -y openssl ca-certificates && rm -rf /var/
 
 FROM base AS deps
 COPY package.json ./
-RUN npm install --no-audit --no-fund
+RUN npm install --no-audit --no-fund --legacy-peer-deps
 
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
