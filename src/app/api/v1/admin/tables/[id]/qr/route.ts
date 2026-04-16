@@ -19,7 +19,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       return new NextResponse(svg, { headers: { 'Content-Type': 'image/svg+xml' } });
     }
     const buf = await QRCode.toBuffer(url, { type: 'png', margin: 1, width: 512 });
-    return new NextResponse(buf, {
+    return new NextResponse(new Uint8Array(buf), {
       headers: {
         'Content-Type': 'image/png',
         'Content-Disposition': `inline; filename="mesa-${t.number}.png"`,
