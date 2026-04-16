@@ -38,6 +38,9 @@ services:
       PORT: 3000
     ports:
       - "127.0.0.1:3000:3000"
+    volumes:
+      - mesa_uploads:/app/public/uploads
 
 volumes:
   mesa_mysql_data:
+  mesa_uploads:

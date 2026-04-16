@@ -22,6 +22,9 @@ model Unit {
   name       String
   address    String?
   phone      String?
+  whatsapp   String?
+  logoUrl    String?
+  primaryColor String? @default("#ea580c")
   timezone   String   @default("America/Sao_Paulo")
   serviceFee Decimal  @default(0.10) @db.Decimal(5, 4)
   active     Boolean  @default(true)

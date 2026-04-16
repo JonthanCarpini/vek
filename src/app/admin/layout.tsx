@@ -13,6 +13,7 @@ const NAV = [
   { href: '/admin/calls', label: 'Chamadas', icon: '🙋' },
   { href: '/admin/users', label: 'Usuários', icon: '👥' },
   { href: '/admin/reports', label: 'Relatórios', icon: '📈' },
+  { href: '/admin/settings', label: 'Configurações', icon: '⚙️' },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

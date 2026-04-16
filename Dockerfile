@@ -21,5 +21,6 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/server.js ./
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/next.config.js ./
+RUN mkdir -p /app/public/uploads
 EXPOSE 3000
 CMD ["sh", "-c", "(npx prisma migrate deploy 2>/dev/null || npx prisma db push --skip-generate --accept-data-loss) && node server.js"]

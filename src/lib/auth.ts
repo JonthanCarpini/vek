@@ -45,6 +45,8 @@ export function verifySession(token: string): SessionPayload | null {
 function extractBearer(req: NextRequest): string | null {
   const auth = req.headers.get('authorization') || '';
   if (auth.startsWith('Bearer ')) return auth.slice(7);
+  const q = req.nextUrl.searchParams.get('t');
+  if (q) return q;
   const cookie = req.cookies.get('md_token')?.value;
   return cookie || null;
 }

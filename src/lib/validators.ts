@@ -31,7 +31,7 @@ export const productSchema = z.object({
   name: z.string().min(1).max(120),
   description: z.string().max(1000).optional().nullable(),
   price: z.number().nonnegative(),
-  imageUrl: z.string().url().optional().nullable(),
+  imageUrl: z.string().max(500).optional().nullable(),
   active: z.boolean().optional(),
   available: z.boolean().optional(),
   preparationTimeMin: z.number().int().min(0).max(240).optional(),
@@ -70,3 +70,13 @@ export const itemStatusSchema = z.object({
 });
 
 export const callAttendSchema = z.object({}).optional();
+
+export const settingsSchema = z.object({
+  name: z.string().min(1).max(120).optional(),
+  address: z.string().max(200).optional().nullable(),
+  phone: z.string().max(30).optional().nullable(),
+  whatsapp: z.string().max(30).optional().nullable(),
+  logoUrl: z.string().max(500).optional().nullable(),
+  primaryColor: z.string().max(16).optional().nullable(),
+  serviceFee: z.number().min(0).max(1).optional(),
+});

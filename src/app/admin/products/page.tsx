@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/staff-client';
+import { ImageUpload } from '@/components/ImageUpload';
 
 const EMPTY = { categoryId: '', name: '', description: '', price: 0, imageUrl: '', available: true, active: true, preparationTimeMin: 15, station: 'cozinha' };
 
@@ -79,8 +80,13 @@ export default function Products() {
               <div><label className="label">Preço</label><input type="number" step="0.01" className="input" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} required /></div>
               <div><label className="label">Preparo (min)</label><input type="number" className="input" value={form.preparationTimeMin} onChange={(e) => setForm({ ...form, preparationTimeMin: e.target.value })} /></div>
             </div>
-            <label className="label mt-3">URL da imagem</label>
-            <input className="input mb-3" value={form.imageUrl} onChange={(e) => setForm({ ...form, imageUrl: e.target.value })} />
+            <div className="mt-3 mb-3">
+              <ImageUpload
+                label="Imagem do produto"
+                value={form.imageUrl}
+                onChange={(url) => setForm({ ...form, imageUrl: url || '' })}
+              />
+            </div>
             <label className="label">Estação</label>
             <select className="input mb-3" value={form.station} onChange={(e) => setForm({ ...form, station: e.target.value })}>
               <option value="cozinha">Cozinha</option><option value="bar">Bar</option><option value="grill">Grill</option>
