@@ -1,9 +1,11 @@
 'use client';
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { saveStaff } from '@/lib/staff-client';
 
-export default function AdminLogin() {
+export const dynamic = 'force-dynamic';
+
+function AdminLoginInner() {
   const router = useRouter();
   const search = useSearchParams();
   const next = search.get('next') || '/admin';
@@ -36,5 +38,13 @@ export default function AdminLogin() {
         <button className="btn btn-primary w-full" disabled={loading}>{loading ? 'Entrando...' : 'Entrar'}</button>
       </form>
     </main>
+  );
+}
+
+export default function AdminLogin() {
+  return (
+    <Suspense fallback={<main className="min-h-screen flex items-center justify-center p-5"><div className="text-gray-400">Carregando...</div></main>}>
+      <AdminLoginInner />
+    </Suspense>
   );
 }
