@@ -1,0 +1,217 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  units     Unit[]
+}
+
+model Unit {
+  id         String   @id @default(cuid())
+  tenantId   String
+  name       String
+  address    String?
+  phone      String?
+  timezone   String   @default("America/Sao_Paulo")
+  serviceFee Decimal  @default(0.10) @db.Decimal(5, 4)
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tenant     Tenant     @relation(fields: [tenantId], references: [id])
+  users      User[]
+  tables     TableEntity[]
+  categories Category[]
+  products   Product[]
+  orders     Order[]
+  sessions   TableSession[]
+  calls      Call[]
+
+  @@index([tenantId])
+}
+
+model User {
+  id           String   @id @default(cuid())
+  unitId       String?
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         String   // super_admin | admin | manager | waiter | kitchen | cashier
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  unit Unit? @relation(fields: [unitId], references: [id])
+
+  @@index([unitId])
+  @@index([role])
+}
+
+model TableEntity {
+  id        String   @id @default(cuid())
+  unitId    String
+  number    Int
+  label     String?
+  qrToken   String   @unique
+  status    String   @default("free") // free | occupied | disabled
+  capacity  Int      @default(4)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  unit     Unit           @relation(fields: [unitId], references: [id])
+  sessions TableSession[]
+  orders   Order[]
+  calls    Call[]
+
+  @@unique([unitId, number])
+  @@index([qrToken])
+}
+
+model TableSession {
+  id            String    @id @default(cuid())
+  tableId       String
+  unitId        String
+  customerName  String
+  customerPhone String
+  status        String    @default("active") // active | closing | closed | cancelled
+  openedAt      DateTime  @default(now())
+  closedAt      DateTime?
+  totalAmount   Decimal   @default(0) @db.Decimal(12, 2)
+
+  table  TableEntity @relation(fields: [tableId], references: [id])
+  unit   Unit        @relation(fields: [unitId], references: [id])
+  orders Order[]
+  calls  Call[]
+
+  @@index([tableId, status])
+  @@index([unitId, status])
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  unitId    String
+  name      String
+  sortOrder Int      @default(0)
+  imageUrl  String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  unit     Unit      @relation(fields: [unitId], references: [id])
+  products Product[]
+
+  @@index([unitId, active])
+}
+
+model Product {
+  id                   String   @id @default(cuid())
+  unitId               String
+  categoryId           String
+  name                 String
+  description          String?  @db.Text
+  price                Decimal  @db.Decimal(10, 2)
+  imageUrl             String?
+  active               Boolean  @default(true)
+  available            Boolean  @default(true)
+  preparationTimeMin   Int      @default(15)
+  station              String   @default("cozinha") // cozinha | bar | grill
+  tags                 String?  @db.Text
+  sortOrder            Int      @default(0)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  unit       Unit        @relation(fields: [unitId], references: [id])
+  category   Category    @relation(fields: [categoryId], references: [id])
+  orderItems OrderItem[]
+
+  @@index([unitId, categoryId, active])
+}
+
+model Order {
+  id             String    @id @default(cuid())
+  sessionId      String
+  unitId         String
+  tableId        String
+  sequenceNumber Int
+  status         String    @default("received") // received | accepted | preparing | ready | delivered | cancelled
+  priority       Int       @default(0)
+  subtotal       Decimal   @db.Decimal(12, 2)
+  serviceFee     Decimal   @default(0) @db.Decimal(12, 2)
+  total          Decimal   @db.Decimal(12, 2)
+  notes          String?   @db.Text
+  acceptedAt     DateTime?
+  readyAt        DateTime?
+  deliveredAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  session TableSession @relation(fields: [sessionId], references: [id])
+  unit    Unit         @relation(fields: [unitId], references: [id])
+  table   TableEntity  @relation(fields: [tableId], references: [id])
+  items   OrderItem[]
+
+  @@index([unitId, status, createdAt])
+  @@index([sessionId])
+}
+
+model OrderItem {
+  id         String   @id @default(cuid())
+  orderId    String
+  productId  String
+  name       String   // snapshot
+  quantity   Int
+  unitPrice  Decimal  @db.Decimal(10, 2)
+  totalPrice Decimal  @db.Decimal(10, 2)
+  notes      String?  @db.Text
+  status     String   @default("pending") // pending | preparing | ready | delivered
+  station    String   @default("cozinha")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@index([status])
+}
+
+model Call {
+  id              String    @id @default(cuid())
+  sessionId       String
+  tableId         String
+  unitId          String
+  type            String    // waiter | bill | help
+  status          String    @default("pending") // pending | attended | cancelled
+  attendedAt      DateTime?
+  attendedByUserId String?
+  createdAt       DateTime  @default(now())
+
+  session TableSession @relation(fields: [sessionId], references: [id])
+  table   TableEntity  @relation(fields: [tableId], references: [id])
+  unit    Unit         @relation(fields: [unitId], references: [id])
+
+  @@index([unitId, status, createdAt])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  action    String
+  entity    String
+  entityId  String?
+  diff      String?  @db.Text
+  ip        String?
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+}

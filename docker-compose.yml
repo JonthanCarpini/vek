@@ -1,0 +1,34 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: mesa_digital_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: mesa_digital
+      MYSQL_USER: mesa
+      MYSQL_PASSWORD: mesa
+    expose:
+      - "3306"
+    volumes:
+      - mesa_mysql_data:/var/lib/mysql
+    command: --default-authentication-plugin=mysql_native_password
+
+  app:
+    build: .
+    container_name: mesa_digital_app
+    restart: unless-stopped
+    depends_on:
+      - mysql
+    environment:
+      DATABASE_URL: "mysql://mesa:mesa@mysql:3306/mesa_digital"
+      JWT_SECRET: "change-me-to-a-strong-secret-min-32chars"
+      JWT_SESSION_SECRET: "another-secret-for-sessions-min-32chars"
+      NEXT_PUBLIC_APP_URL: "http://localhost:3000"
+      NEXT_PUBLIC_SOCKET_URL: "http://localhost:3000"
+      PORT: 3000
+    ports:
+      - "3000:3000"
+
+volumes:
+  mesa_mysql_data:
