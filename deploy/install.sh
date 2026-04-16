@@ -83,6 +83,14 @@ for i in $(seq 1 30); do
   sleep 3
 done
 
+log "Sincronizando schema do banco (prisma db push)"
+for i in $(seq 1 10); do
+  if docker compose -f docker-compose.prod.yml exec -T app npx prisma db push --skip-generate --accept-data-loss; then
+    echo "Schema sincronizado."; break
+  fi
+  echo "Tentativa $i falhou, aguardando 5s..."; sleep 5
+done
+
 log "Rodando seed (idempotente)"
 docker compose -f docker-compose.prod.yml exec -T app npm run seed || echo "(seed falhou ou ja executado)"
 
