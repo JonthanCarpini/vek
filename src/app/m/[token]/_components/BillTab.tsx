@@ -15,11 +15,13 @@ type Props = {
   onCallWaiter: () => void;
   onRequestBill: () => void;
   onCancelCall: (id: string) => void;
+  onSendWhatsAppReceipt?: () => void;
 };
 
 export function BillTab({
   session, orders, subtotal, serviceFee, total, serviceFeePct,
   calls, primaryColor, onCallWaiter, onRequestBill, onCancelCall,
+  onSendWhatsAppReceipt,
 }: Props) {
   const activeOrders = orders.filter((o) => o.status !== 'cancelled');
   const pendingCalls = calls.filter((c) => c.status === 'pending');
@@ -49,6 +51,15 @@ export function BillTab({
             </div>
           </div>
         </div>
+
+        {onSendWhatsAppReceipt && (
+          <button
+            onClick={onSendWhatsAppReceipt}
+            className="w-full mt-4 flex items-center justify-center gap-2 text-xs font-medium text-green-400 hover:text-green-300 transition"
+          >
+            <span>🟢</span> Enviar comprovante via WhatsApp
+          </button>
+        )}
       </div>
 
       {/* Chamadas pendentes */}

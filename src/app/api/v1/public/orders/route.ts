@@ -9,6 +9,10 @@ export async function GET(req: NextRequest) {
   try {
     const s = getSessionFromRequest(req);
     if (!s) return unauthorized();
+
+    const session = await prisma.tableSession.findUnique({ where: { id: s.sid }, select: { status: true } });
+    if (!session || session.status === 'closed') return unauthorized('Sessão encerrada');
+
     const orders = await prisma.order.findMany({
       where: { sessionId: s.sid },
       orderBy: { createdAt: 'desc' },

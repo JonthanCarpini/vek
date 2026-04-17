@@ -101,6 +101,35 @@ export function CashierSessionModal({ sessionId, onClose }: { sessionId: string;
     finally { setBusy(false); }
   }
 
+  function sendWhatsAppReceipt() {
+    if (!data) return;
+    const activeOrders = data.orders.filter((o: any) => o.status !== 'cancelled');
+    
+    let text = `*RESUMO DA CONTA - MESA ${data.table?.number}*\n`;
+    text += `Cliente: ${data.customerName}\n`;
+    text += `--------------------------------\n`;
+
+    activeOrders.forEach((o: any) => {
+      text += `*Pedido #${o.sequenceNumber}*\n`;
+      o.items.forEach((i: any) => {
+        text += `${i.quantity}x ${i.name} - ${formatBRL(Number(i.unitPrice) * i.quantity)}\n`;
+      });
+      text += `\n`;
+    });
+
+    text += `--------------------------------\n`;
+    text += `Subtotal: ${formatBRL(data.subtotal)}\n`;
+    if (data.serviceFee > 0) {
+      text += `Taxa de serviço: ${formatBRL(data.serviceFee)}\n`;
+    }
+    text += `*TOTAL: ${formatBRL(data.total)}*\n\n`;
+    text += `Obrigado pela preferência! 😊`;
+
+    const encoded = encodeURIComponent(text);
+    const phone = data.customerPhone?.replace(/\D/g, '');
+    window.open(`https://wa.me/${phone ? `55${phone}` : ''}?text=${encoded}`, '_blank');
+  }
+
   if (!data) {
     return (
       <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
@@ -227,6 +256,13 @@ export function CashierSessionModal({ sessionId, onClose }: { sessionId: string;
                 Forçar fechamento
               </button>
             </div>
+
+            <button
+              onClick={sendWhatsAppReceipt}
+              className="w-full btn btn-ghost text-green-400 border border-green-900/30 hover:bg-green-900/10 mt-2"
+            >
+              🟢 Enviar comprovante ao cliente
+            </button>
           </div>
         </div>
       </div>

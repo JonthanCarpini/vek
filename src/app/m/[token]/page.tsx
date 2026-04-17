@@ -123,6 +123,44 @@ export default function ClientPage() {
       loadCalls();
       showToast('Chamada atendida!');
     });
+    s.on('session.closed', () => {
+      showToast('Esta conta foi encerrada.');
+      handleLogout();
+    });
+  }
+
+  function handleSendWhatsAppReceipt() {
+    if (!session || orders.length === 0) return;
+
+    const activeOrders = orders.filter((o) => o.status !== 'cancelled');
+    const sessionSubtotal = activeOrders.reduce((s, o) => s + Number(o.subtotal), 0);
+    const sessionServiceFee = activeOrders.reduce((s, o) => s + Number(o.serviceFee), 0);
+    const sessionTotal = activeOrders.reduce((s, o) => s + Number(o.total), 0);
+
+    let text = `*RESUMO DA CONTA - MESA ${session.tableNumber}*\n`;
+    text += `Cliente: ${session.customerName}\n`;
+    text += `--------------------------------\n`;
+
+    activeOrders.forEach((o) => {
+      text += `*Pedido #${o.sequenceNumber}*\n`;
+      o.items.forEach((i) => {
+        text += `${i.quantity}x ${i.name} - ${formatBRL(Number(i.unitPrice) * i.quantity)}\n`;
+      });
+      text += `\n`;
+    });
+
+    text += `--------------------------------\n`;
+    text += `Subtotal: ${formatBRL(sessionSubtotal)}\n`;
+    if (sessionServiceFee > 0) {
+      text += `Taxa de serviço: ${formatBRL(sessionServiceFee)}\n`;
+    }
+    text += `*TOTAL: ${formatBRL(sessionTotal)}*\n\n`;
+    text += `Obrigado pela preferência! 😊`;
+
+    const encoded = encodeURIComponent(text);
+    // Tenta usar o telefone da sessão, se não tiver pede um.
+    // Mas no check-in o telefone é obrigatório.
+    window.open(`https://wa.me/?text=${encoded}`, '_blank');
   }
 
   useEffect(() => {
@@ -416,6 +454,7 @@ export default function ClientPage() {
           onCallWaiter={() => setShowCallWaiter(true)}
           onRequestBill={() => setShowBillRequest(true)}
           onCancelCall={handleCancelCall}
+          onSendWhatsAppReceipt={handleSendWhatsAppReceipt}
           primaryColor={primaryColor}
         />
       </div>

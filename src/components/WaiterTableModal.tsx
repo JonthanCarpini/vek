@@ -120,6 +120,35 @@ export function WaiterTableModal({ sessionId, onClose }: { sessionId: string; on
     finally { setBusy(false); }
   }
 
+  function sendWhatsAppReceipt() {
+    if (!session) return;
+    const activeOrders = orders.filter((o: any) => o.status !== 'cancelled');
+    
+    let text = `*RESUMO DA CONTA - MESA ${session.table?.number}*\n`;
+    text += `Cliente: ${session.customerName}\n`;
+    text += `--------------------------------\n`;
+
+    activeOrders.forEach((o: any) => {
+      text += `*Pedido #${o.sequenceNumber}*\n`;
+      o.items.forEach((i: any) => {
+        text += `${i.quantity}x ${i.name} - ${formatBRL(Number(i.unitPrice) * i.quantity)}\n`;
+      });
+      text += `\n`;
+    });
+
+    text += `--------------------------------\n`;
+    text += `Subtotal: ${formatBRL(session.subtotal)}\n`;
+    if (session.serviceFee > 0) {
+      text += `Taxa de serviço: ${formatBRL(session.serviceFee)}\n`;
+    }
+    text += `*TOTAL: ${formatBRL(session.total)}*\n\n`;
+    text += `Obrigado pela preferência! 😊`;
+
+    const encoded = encodeURIComponent(text);
+    const phone = session.customerPhone?.replace(/\D/g, '');
+    window.open(`https://wa.me/${phone ? `55${phone}` : ''}?text=${encoded}`, '_blank');
+  }
+
   const filteredProducts = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (q) {
@@ -165,6 +194,12 @@ export function WaiterTableModal({ sessionId, onClose }: { sessionId: string; on
                 {session.serviceFee > 0 && <span className="opacity-70"> (incl. {formatBRL(session.serviceFee)} taxa)</span>}
                 {session.remaining > 0 && <span className="text-amber-400 font-semibold"> · Restante {formatBRL(session.remaining)}</span>}
               </div>
+              <button
+                onClick={sendWhatsAppReceipt}
+                className="mt-1 flex items-center gap-1.5 text-[10px] font-medium text-green-400 hover:text-green-300 transition"
+              >
+                <span>🟢</span> Enviar comprovante via WhatsApp
+              </button>
             </div>
             <button onClick={onClose} className="text-gray-400 text-2xl leading-none px-3">×</button>
           </header>
