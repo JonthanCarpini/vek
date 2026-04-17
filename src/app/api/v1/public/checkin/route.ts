@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { ok, fail, parseBody, serverError, notFound } from '@/lib/api';
 import { checkinSchema } from '@/lib/validators';
 import { signSession } from '@/lib/auth';
+import { getStoreState } from '@/lib/store';
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,6 +14,10 @@ export async function POST(req: NextRequest) {
     const table = await prisma.tableEntity.findUnique({ where: { qrToken } });
     if (!table) return notFound('Mesa não encontrada');
     if (table.status === 'disabled') return fail('Mesa desativada', 403);
+    if (table.status === 'reserved') return fail('Mesa reservada', 403);
+
+    const state = await getStoreState(table.unitId);
+    if (!state.open) return fail(state.reason || 'Loja fechada no momento', 403);
 
     // Reutiliza sessão ativa ou cria nova
     let session = await prisma.tableSession.findFirst({

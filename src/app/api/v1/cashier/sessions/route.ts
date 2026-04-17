@@ -19,12 +19,16 @@ export async function GET(req: NextRequest) {
           include: { items: true },
           orderBy: { createdAt: 'asc' },
         },
+        payments: true,
       },
     });
 
-    const data = sessions.map((s) => {
-      const subtotal = s.orders.reduce((sum, o) => sum + o.items.reduce((a, i) => a + Number(i.unitPrice) * i.quantity, 0), 0);
-      const status = s.orders.every((o) => o.status === 'delivered') && s.orders.length > 0 ? 'ready_to_close' : 'open';
+    const data = sessions.map((s: any) => {
+      const subtotal = s.orders.reduce((sum: number, o: any) => sum + o.items.reduce((a: number, i: any) => a + Number(i.unitPrice) * i.quantity, 0), 0);
+      const paid = s.payments.reduce((acc: number, p: any) => acc + Number(p.amount) - Number(p.changeGiven), 0);
+      const remaining = Math.max(0, Number((subtotal - paid).toFixed(2)));
+      const allDelivered = s.orders.length > 0 && s.orders.every((o: any) => o.status === 'delivered');
+      const status = remaining <= 0 && subtotal > 0 ? 'ready_to_close' : allDelivered ? 'delivered' : 'open';
       return {
         id: s.id,
         openedAt: s.openedAt,
@@ -32,6 +36,8 @@ export async function GET(req: NextRequest) {
         table: s.table,
         orderCount: s.orders.length,
         subtotal,
+        paid,
+        remaining,
         status,
       };
     });

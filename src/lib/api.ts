@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { ZodError, ZodSchema } from 'zod';
+import { ZodError, ZodType, z } from 'zod';
 
 export function ok<T>(data: T, init?: ResponseInit) {
   return NextResponse.json({ data }, init);
@@ -22,10 +22,13 @@ export function serverError(e: unknown) {
   return fail(msg, 500);
 }
 
-export async function parseBody<T>(req: Request, schema: ZodSchema<T>): Promise<{ ok: true; data: T } | { ok: false; res: NextResponse }> {
+export async function parseBody<S extends ZodType<any, any, any>>(
+  req: Request,
+  schema: S,
+): Promise<{ ok: true; data: z.infer<S> } | { ok: false; res: NextResponse }> {
   try {
     const raw = await req.json();
-    const data = schema.parse(raw);
+    const data = schema.parse(raw) as z.infer<S>;
     return { ok: true, data };
   } catch (e) {
     if (e instanceof ZodError) {
