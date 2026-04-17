@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createReadStream, statSync } from 'fs';
-import { join, resolve } from 'path';
+import { readFile, stat } from 'fs/promises';
+import { resolve, sep } from 'path';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -17,15 +17,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ pat
     const { path } = await params;
     const rel = path.join('/');
     const full = resolve(ROOT, rel);
-    if (!full.startsWith(ROOT + (ROOT.endsWith('/') ? '' : '/')) && full !== ROOT) {
+    if (!full.startsWith(ROOT + sep) && full !== ROOT) {
       return new NextResponse('forbidden', { status: 403 });
     }
-    const st = statSync(full);
+    const st = await stat(full);
     if (!st.isFile()) return new NextResponse('not found', { status: 404 });
     const ext = (rel.split('.').pop() || '').toLowerCase();
     const type = MIME[ext] || 'application/octet-stream';
-    const stream = createReadStream(full) as any;
-    return new NextResponse(stream, {
+    const buf = await readFile(full);
+    return new NextResponse(buf, {
       status: 200,
       headers: {
         'content-type': type,
