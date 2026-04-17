@@ -50,11 +50,12 @@ function VideoUploadInline({ value, onChange }: { value: string; onChange: (url:
   );
 }
 
-const EMPTY = { categoryId: '', name: '', description: '', price: 0, imageUrl: '', available: true, active: true, preparationTimeMin: 15, station: 'cozinha', featured: false, videoUrl: '' };
+const EMPTY = { categoryId: '', name: '', description: '', price: 0, imageUrl: '', available: true, active: true, preparationTimeMin: 15, station: 'cozinha', featured: false, videoUrl: '', ingredients: [] as any[] };
 
 export default function Products() {
   const [products, setProducts] = useState<any[]>([]);
   const [cats, setCats] = useState<any[]>([]);
+  const [ingredients, setIngredients] = useState<any[]>([]);
   const [form, setForm] = useState<any>(EMPTY);
   const [editing, setEditing] = useState<any>(null);
   const [open, setOpen] = useState(false);
@@ -70,9 +71,25 @@ export default function Products() {
       if (filterStatus === 'active') qs.set('active', 'true');
       if (filterStatus === 'archived') qs.set('active', 'false');
       const q = qs.toString() ? `?${qs}` : '';
-      const [p, c] = await Promise.all([apiFetch(`/api/v1/admin/products${q}`), apiFetch('/api/v1/admin/categories')]);
-      setProducts(p.products); setCats(c.categories);
+      const [p, c, ing] = await Promise.all([
+        apiFetch(`/api/v1/admin/products${q}`),
+        apiFetch('/api/v1/admin/categories'),
+        apiFetch('/api/v1/admin/ingredients').catch(() => ({ ingredients: [] })),
+      ]);
+      setProducts(p.products); setCats(c.categories); setIngredients(ing.ingredients || []);
     } catch {}
+  }
+
+  function addIngredient() {
+    const available = ingredients.filter((i) => !form.ingredients.some((x: any) => x.ingredientId === i.id));
+    if (available.length === 0) return;
+    setForm({ ...form, ingredients: [...form.ingredients, { ingredientId: available[0].id, quantity: 1, optional: false }] });
+  }
+  function updateIngredient(idx: number, patch: any) {
+    setForm({ ...form, ingredients: form.ingredients.map((x: any, i: number) => i === idx ? { ...x, ...patch } : x) });
+  }
+  function removeIngredient(idx: number) {
+    setForm({ ...form, ingredients: form.ingredients.filter((_: any, i: number) => i !== idx) });
   }
 
   const filtered = products.filter((p) => !search || p.name.toLowerCase().includes(search.toLowerCase()));
@@ -83,6 +100,9 @@ export default function Products() {
       if (!body.imageUrl) delete body.imageUrl;
       if (!body.description) delete body.description;
       if (!body.videoUrl) delete body.videoUrl;
+      body.ingredients = (form.ingredients || []).map((i: any) => ({
+        ingredientId: i.ingredientId, quantity: Number(i.quantity) || 0, optional: !!i.optional,
+      })).filter((i: any) => i.ingredientId && i.quantity > 0);
       if (editing) await apiFetch(`/api/v1/admin/products/${editing.id}`, { method: 'PUT', body: JSON.stringify(body) });
       else await apiFetch('/api/v1/admin/products', { method: 'POST', body: JSON.stringify(body) });
       setOpen(false); setEditing(null); setForm(EMPTY); load();
@@ -90,7 +110,15 @@ export default function Products() {
   }
   function openEdit(p: any) {
     setEditing(p);
-    setForm({ categoryId: p.categoryId, name: p.name, description: p.description || '', price: Number(p.price), imageUrl: p.imageUrl || '', available: p.available, active: p.active, preparationTimeMin: p.preparationTimeMin, station: p.station, featured: !!p.featured, videoUrl: p.videoUrl || '' });
+    setForm({
+      categoryId: p.categoryId, name: p.name, description: p.description || '', price: Number(p.price),
+      imageUrl: p.imageUrl || '', available: p.available, active: p.active,
+      preparationTimeMin: p.preparationTimeMin, station: p.station,
+      featured: !!p.featured, videoUrl: p.videoUrl || '',
+      ingredients: (p.ingredients || []).map((pi: any) => ({
+        ingredientId: pi.ingredientId, quantity: Number(pi.quantity), optional: !!pi.optional,
+      })),
+    });
     setOpen(true);
   }
   async function archive(id: string) {
@@ -184,6 +212,32 @@ export default function Products() {
                 onChange={(url) => setForm({ ...form, videoUrl: url || '' })}
               />
             )}
+
+            <div className="mb-3 border border-gray-800 rounded p-3">
+              <div className="flex justify-between items-center mb-2">
+                <label className="label !mb-0">🥬 Ingredientes</label>
+                <button type="button" onClick={addIngredient} disabled={ingredients.length === 0 || form.ingredients.length >= ingredients.length} className="btn btn-ghost text-xs">+ Adicionar</button>
+              </div>
+              {ingredients.length === 0 && <div className="text-xs text-gray-500">Nenhum ingrediente cadastrado. Cadastre em "Ingredientes" no menu.</div>}
+              {form.ingredients.length === 0 && ingredients.length > 0 && <div className="text-xs text-gray-500">Sem ingredientes vinculados.</div>}
+              <div className="space-y-2">
+                {form.ingredients.map((it: any, idx: number) => {
+                  const ing = ingredients.find((i) => i.id === it.ingredientId);
+                  return (
+                    <div key={idx} className="flex gap-2 items-center">
+                      <select className="input flex-1" value={it.ingredientId} onChange={(e) => updateIngredient(idx, { ingredientId: e.target.value })}>
+                        {ingredients.map((i) => <option key={i.id} value={i.id}>{i.name} ({i.unitOfMeasure})</option>)}
+                      </select>
+                      <input type="number" step="0.001" className="input w-24" value={it.quantity} onChange={(e) => updateIngredient(idx, { quantity: e.target.value })} />
+                      <span className="text-xs text-gray-500 w-8">{ing?.unitOfMeasure || ''}</span>
+                      <label className="flex items-center gap-1 text-xs"><input type="checkbox" checked={it.optional} onChange={(e) => updateIngredient(idx, { optional: e.target.checked })} /> opc.</label>
+                      <button type="button" onClick={() => removeIngredient(idx)} className="text-red-400 text-xs">✕</button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
             <div className="flex gap-2">
               <button className="btn btn-primary flex-1">Salvar</button>
               <button type="button" onClick={() => setOpen(false)} className="btn btn-ghost">Cancelar</button>
