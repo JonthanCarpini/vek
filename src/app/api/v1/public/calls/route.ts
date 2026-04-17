@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { ok, parseBody, serverError, unauthorized } from '@/lib/api';
 import { createCallSchema } from '@/lib/validators';
 import { getSessionFromRequest } from '@/lib/auth';
-import { emitToWaiters, SocketEvents } from '@/lib/socket';
+import { emitToWaiters, emitToDashboard, SocketEvents } from '@/lib/socket';
 
 export async function POST(req: NextRequest) {
   try {
@@ -40,10 +40,14 @@ export async function POST(req: NextRequest) {
           include: { table: true },
         });
 
-    emitToWaiters(s.uid, SocketEvents.CALL_CREATED, {
+    const payload = {
       id: call.id, type: call.type, reason: call.reason, paymentHint: call.paymentHint, splitCount: call.splitCount,
       tableId: call.tableId, tableNumber: call.table.number, createdAt: call.createdAt, customerName: s.name,
-    });
+    };
+
+    emitToWaiters(s.uid, SocketEvents.CALL_CREATED, payload);
+    emitToDashboard(s.uid, SocketEvents.CALL_CREATED, payload);
+    
     return ok({ call: { id: call.id, type: call.type, reason: call.reason, paymentHint: call.paymentHint, status: call.status, createdAt: call.createdAt } });
   } catch (e) { return serverError(e); }
 }

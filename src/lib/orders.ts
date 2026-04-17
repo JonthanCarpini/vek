@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { emitToKitchen, emitToSession, emitToDashboard, SocketEvents } from '@/lib/socket';
+import { emitToKitchen, emitToWaiters, emitToSession, emitToDashboard, SocketEvents } from '@/lib/socket';
 
 export type CreateOrderItemInput = {
   productId: string;
@@ -128,8 +128,9 @@ export async function createOrderFromItems(params: {
 
   const payload = serializeOrder(order);
   emitToKitchen(unitId, SocketEvents.ORDER_CREATED, payload);
-  emitToSession(sessionId, SocketEvents.ORDER_STATUS_CHANGED, payload);
+  emitToWaiters(unitId, SocketEvents.ORDER_CREATED, payload);
   emitToDashboard(unitId, SocketEvents.ORDER_CREATED, payload);
+  emitToSession(sessionId, SocketEvents.ORDER_STATUS_CHANGED, payload);
 
   return { ok: true, order: payload };
 }
@@ -217,6 +218,7 @@ export async function addItemsToOrder(params: {
 
   const payload = serializeOrder(updated);
   emitToKitchen(unitId, SocketEvents.ORDER_UPDATED, payload);
+  emitToWaiters(unitId, SocketEvents.ORDER_UPDATED, payload);
   emitToSession(order.sessionId, SocketEvents.ORDER_UPDATED, payload);
   emitToDashboard(unitId, SocketEvents.ORDER_UPDATED, payload);
   return { ok: true, order: payload };
@@ -277,6 +279,7 @@ export async function cancelOrderItem(params: { itemId: string; unitId: string; 
 
   const payload = serializeOrder(updated);
   emitToKitchen(unitId, SocketEvents.ORDER_UPDATED, payload);
+  emitToWaiters(unitId, SocketEvents.ORDER_UPDATED, payload);
   emitToSession(item.order.sessionId, SocketEvents.ORDER_UPDATED, payload);
   emitToDashboard(unitId, SocketEvents.ORDER_UPDATED, payload);
   return { ok: true, order: payload };
@@ -330,6 +333,7 @@ export async function cancelOrder(params: { orderId: string; unitId: string; rea
 
   const payload = serializeOrder(updated);
   emitToKitchen(unitId, SocketEvents.ORDER_UPDATED, payload);
+  emitToWaiters(unitId, SocketEvents.ORDER_UPDATED, payload);
   emitToSession(order.sessionId, SocketEvents.ORDER_UPDATED, payload);
   emitToDashboard(unitId, SocketEvents.ORDER_UPDATED, payload);
   return { ok: true, order: payload };

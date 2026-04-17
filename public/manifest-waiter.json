@@ -1,0 +1,14 @@
+{
+  "name": "Mesa Digital - Garçom",
+  "short_name": "MD Garçom",
+  "description": "Painel do Garçom Mesa Digital",
+  "start_url": "/waiter",
+  "display": "standalone",
+  "background_color": "#0b0b0f",
+  "theme_color": "#ea580c",
+  "scope": "/waiter",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icon.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

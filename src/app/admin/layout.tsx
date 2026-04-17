@@ -4,25 +4,54 @@ import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { loadStaff, clearStaff, apiFetch } from '@/lib/staff-client';
 import { getSocket, joinRooms } from '@/lib/socket-client';
+import { PwaHead } from '@/components/PwaHead';
+import { playNotificationSound } from '@/lib/notifications';
 
 type Role = 'super_admin' | 'admin' | 'manager' | 'waiter' | 'kitchen' | 'cashier';
 interface NavItem { href: string; label: string; icon: string; roles: Role[]; external?: boolean }
 
 const ADMIN_FULL: Role[] = ['super_admin', 'admin', 'manager'];
-const NAV: NavItem[] = [
-  { href: '/admin', label: 'Dashboard', icon: '📊', roles: ADMIN_FULL },
-  { href: '/admin/orders', label: 'Pedidos', icon: '🧾', roles: ADMIN_FULL },
-  { href: '/admin/products', label: 'Produtos', icon: '🍔', roles: ADMIN_FULL },
-  { href: '/admin/categories', label: 'Categorias', icon: '📂', roles: ADMIN_FULL },
-  { href: '/admin/ingredients', label: 'Ingredientes', icon: '🥬', roles: ADMIN_FULL },
-  { href: '/admin/tables', label: 'Mesas & QR', icon: '🪑', roles: ADMIN_FULL },
-  { href: '/admin/calls', label: 'Chamadas', icon: '🙋', roles: ADMIN_FULL },
-  { href: '/admin/customers', label: 'Clientes', icon: '🧑', roles: ADMIN_FULL },
-  { href: '/admin/display', label: 'Painel TV (mídia)', icon: '📺', roles: ADMIN_FULL },
-  { href: '/admin/users', label: 'Usuários', icon: '👥', roles: ['super_admin', 'admin'] },
-  { href: '/admin/reports', label: 'Relatórios', icon: '📈', roles: ADMIN_FULL },
-  { href: '/admin/settings', label: 'Configurações', icon: '⚙️', roles: ADMIN_FULL },
+
+interface NavGroup {
+  label: string;
+  items: NavItem[];
+}
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    label: 'Operação',
+    items: [
+      { href: '/admin', label: 'Dashboard', icon: '📊', roles: ADMIN_FULL },
+      { href: '/admin/orders', label: 'Pedidos', icon: '🧾', roles: ADMIN_FULL },
+      { href: '/admin/calls', label: 'Chamadas', icon: '🙋', roles: ADMIN_FULL },
+    ]
+  },
+  {
+    label: 'Cardápio',
+    items: [
+      { href: '/admin/products', label: 'Produtos', icon: '🍔', roles: ADMIN_FULL },
+      { href: '/admin/categories', label: 'Categorias', icon: '📂', roles: ADMIN_FULL },
+      { href: '/admin/ingredients', label: 'Ingredientes', icon: '🥬', roles: ADMIN_FULL },
+    ]
+  },
+  {
+    label: 'Gestão',
+    items: [
+      { href: '/admin/customers', label: 'Clientes', icon: '🧑', roles: ADMIN_FULL },
+      { href: '/admin/tables', label: 'Mesas & QR', icon: '�', roles: ADMIN_FULL },
+      { href: '/admin/display', label: 'Painel TV (mídia)', icon: '📺', roles: ADMIN_FULL },
+    ]
+  },
+  {
+    label: 'Administração',
+    items: [
+      { href: '/admin/users', label: 'Usuários', icon: '👥', roles: ['super_admin', 'admin'] },
+      { href: '/admin/reports', label: 'Relatórios', icon: '📈', roles: ADMIN_FULL },
+      { href: '/admin/settings', label: 'Configurações', icon: '⚙️', roles: ADMIN_FULL },
+    ]
+  }
 ];
+
 const SHORTCUTS: NavItem[] = [
   { href: '/kds', label: 'Cozinha (KDS)', icon: '🍳', roles: ADMIN_FULL, external: true },
   { href: '/waiter', label: 'Garçom', icon: '🛎️', roles: ADMIN_FULL, external: true },
@@ -41,6 +70,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [user, setUser] = useState<any>(null);
   const [unit, setUnit] = useState<any>(null);
   const [storeState, setStoreState] = useState<any>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  function showToast(m: string) { setToast(m); setTimeout(() => setToast(null), 4000); }
 
   useEffect(() => {
     if (pathname === '/admin/login') return;
@@ -75,7 +107,29 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       const sock = getSocket();
       const r = () => load();
       sock.on('store.state_changed', r);
-      return () => { clearInterval(i); cancelled = true; sock.off('store.state_changed', r); };
+      
+      // Notificações sonoras
+      const onOrder = (p: any) => { 
+        load(); 
+        playNotificationSound('order'); 
+        showToast(`Novo pedido #${p?.sequenceNumber || ''}`); 
+      };
+      const onCall = (p: any) => { 
+        load(); 
+        playNotificationSound('call'); 
+        showToast(`Chamado na mesa ${p?.table?.number || ''}`); 
+      };
+      
+      sock.on('order.created', onOrder);
+      sock.on('call.created', onCall);
+
+      return () => { 
+        clearInterval(i); 
+        cancelled = true; 
+        sock.off('store.state_changed', r);
+        sock.off('order.created', onOrder);
+        sock.off('call.created', onCall);
+      };
     }
     return () => { clearInterval(i); cancelled = true; };
   }, [user]);
@@ -90,7 +144,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   if (!user) return <div className="p-10 text-gray-400">Carregando...</div>;
 
   const role = user.role as Role;
-  const navItems = NAV.filter((n) => n.roles.includes(role));
+  const filteredGroups = NAV_GROUPS.map(group => ({
+    ...group,
+    items: group.items.filter(item => item.roles.includes(role))
+  })).filter(group => group.items.length > 0);
+  
   const shortcuts = SHORTCUTS.filter((n) => n.roles.includes(role));
 
   const statusOpen = storeState?.open === true;
@@ -99,6 +157,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <div className="min-h-screen flex flex-col">
+      <PwaHead manifest="/manifest-admin.json" />
       <div className={`flex items-center justify-between px-4 py-2 text-sm border-b border-[color:var(--border)] ${statusOpen ? 'bg-green-900/40' : 'bg-red-900/40'}`}>
         <div className="flex items-center gap-3">
           {unit?.logoUrl && <img src={unit.logoUrl} className="w-7 h-7 rounded-full object-cover" alt="" />}
@@ -120,16 +179,23 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           {unit?.logoUrl ? <img src={unit.logoUrl} className="w-8 h-8 rounded object-cover" alt="" /> : '🍔'}
           <span className="truncate">{unit?.name || 'Mesa Digital'}</span>
         </div>
-        <nav className="flex flex-col gap-1">
-          {navItems.map((n) => {
-            const active = pathname === n.href || (n.href !== '/admin' && pathname.startsWith(n.href));
-            return (
-              <Link key={n.href} href={n.href}
-                className={`px-3 py-2 rounded-lg text-sm ${active ? 'bg-brand-600 text-white' : 'hover:bg-[#1f1f2b]'}`}>
-                <span className="mr-2">{n.icon}</span>{n.label}
-              </Link>
-            );
-          })}
+        <nav className="flex flex-col gap-4">
+          {filteredGroups.map((group) => (
+            <div key={group.label} className="flex flex-col gap-1">
+              <div className="text-[10px] uppercase text-gray-500 mb-1 tracking-widest px-3">
+                {group.label}
+              </div>
+              {group.items.map((n) => {
+                const active = pathname === n.href || (n.href !== '/admin' && pathname.startsWith(n.href));
+                return (
+                  <Link key={n.href} href={n.href}
+                    className={`px-3 py-2 rounded-lg text-sm transition-colors ${active ? 'bg-brand-600 text-white shadow-md' : 'hover:bg-[#1f1f2b] text-gray-300 hover:text-white'}`}>
+                    <span className="mr-2">{n.icon}</span>{n.label}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
           {shortcuts.length > 0 && (
             <>
               <div className="text-[10px] uppercase text-gray-500 mt-4 mb-1 tracking-widest">Áreas operacionais</div>
@@ -151,6 +217,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </aside>
       <main className="flex-1 p-6 overflow-x-auto">{children}</main>
     </div>
+
+    {/* Toast Notification */}
+    {toast && (
+      <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] bg-brand-600 text-white px-6 py-3 rounded-full shadow-2xl animate-fade-in font-bold flex items-center gap-2">
+        <span className="text-xl">🔔</span> {toast}
+      </div>
+    )}
     </div>
   );
 }

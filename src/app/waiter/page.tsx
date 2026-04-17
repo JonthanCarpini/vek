@@ -5,6 +5,8 @@ import { apiFetch, loadStaff, clearStaff } from '@/lib/staff-client';
 import { getSocket, joinRooms } from '@/lib/socket-client';
 import { formatBRL } from '@/lib/format';
 import { WaiterTableModal } from '@/components/WaiterTableModal';
+import { PwaHead } from '@/components/PwaHead';
+import { playNotificationSound } from '@/lib/notifications';
 
 const TYPE_LABEL: Record<string, string> = { waiter: '🙋 Garçom', bill: '💳 Conta', help: '❓ Ajuda' };
 const STATUS_LABEL: Record<string, string> = {
@@ -26,6 +28,9 @@ export default function WaiterPage() {
   const [calls, setCalls] = useState<any[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
   const [manageSession, setManageSession] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  function showToast(m: string) { setToast(m); setTimeout(() => setToast(null), 4000); }
 
   useEffect(() => {
     const s = loadStaff();
@@ -33,18 +38,35 @@ export default function WaiterPage() {
     loadAll();
     if (s.user.unitId) joinRooms([`unit:${s.user.unitId}:waiters`]);
     const sock = getSocket();
+    
+    // Notificações sonoras
+    const onCall = (p: any) => { 
+      loadAll(); 
+      playNotificationSound('call'); 
+      showToast(`Chamado na mesa ${p?.table?.number || ''}`);
+    };
+    const onOrder = (p: any) => { 
+      loadAll(); 
+      playNotificationSound('order'); 
+      showToast(`Novo pedido #${p?.sequenceNumber || ''}`);
+    };
     const reload = () => loadAll();
-    sock.on('call.created', reload);
+
+    sock.on('call.created', onCall);
     sock.on('call.attended', reload);
-    sock.on('order.created', reload);
-    sock.on('order.updated', reload);
+    sock.on('order.created', onOrder);
+    sock.on('order.updated', onOrder);
     sock.on('order.status_changed', reload);
     sock.on('session.closed', reload);
+
     const i = setInterval(loadAll, 10000);
     return () => {
-      sock.off('call.created', reload); sock.off('call.attended', reload);
-      sock.off('order.created', reload); sock.off('order.updated', reload);
-      sock.off('order.status_changed', reload); sock.off('session.closed', reload);
+      sock.off('call.created', onCall); 
+      sock.off('call.attended', reload);
+      sock.off('order.created', onOrder); 
+      sock.off('order.updated', onOrder);
+      sock.off('order.status_changed', reload); 
+      sock.off('session.closed', reload);
       clearInterval(i);
     };
   }, []);
@@ -74,6 +96,7 @@ export default function WaiterPage() {
 
   return (
     <main className="min-h-screen p-4">
+      <PwaHead manifest="/manifest-waiter.json" />
       <header className="flex justify-between items-center mb-4">
         <div className="text-2xl font-bold">🙋 Painel do Garçom</div>
         <button onClick={() => { clearStaff(); router.push('/admin/login'); }} className="btn btn-ghost">Sair</button>
@@ -166,6 +189,13 @@ export default function WaiterPage() {
           sessionId={manageSession}
           onClose={() => { setManageSession(null); loadAll(); }}
         />
+      )}
+
+      {/* Toast Notification */}
+      {toast && (
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[100] bg-brand-600 text-white px-6 py-3 rounded-full shadow-2xl animate-fade-in font-bold flex items-center gap-2">
+          <span className="text-xl">🔔</span> {toast}
+        </div>
       )}
     </main>
   );

@@ -1,11 +1,13 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { apiFetch, loadStaff } from '@/lib/staff-client';
+import { apiFetch, loadStaff, clearStaff } from '@/lib/staff-client';
 import { getSocket, joinRooms } from '@/lib/socket-client';
 import { formatBRL } from '@/lib/format';
 import { CashierSessionModal } from '@/components/CashierSessionModal';
 import { CashierSummaryCard } from '@/components/CashierSummaryCard';
+import { PwaHead } from '@/components/PwaHead';
+import { playNotificationSound } from '@/lib/notifications';
 
 export default function CashierPage() {
   const router = useRouter();
@@ -16,7 +18,10 @@ export default function CashierPage() {
   const [openingCash, setOpeningCash] = useState('');
   const [closingCash, setClosingCash] = useState('');
   const [modal, setModal] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  function showToast(m: string) { setToast(m); setTimeout(() => setToast(null), 4000); }
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
@@ -28,17 +33,25 @@ export default function CashierPage() {
     loadSummary();
     if (s.user.unitId) joinRooms([`unit:${s.user.unitId}:dashboard`]);
     const sock = getSocket();
+    
+    // Notificações sonoras
+    const onOrder = () => { load(); loadSummary(); playNotificationSound('order'); };
     const r = () => { load(); loadSummary(); };
-    sock.on('order.created', r);
-    sock.on('order.updated', r);
+    
+    sock.on('order.created', onOrder);
+    sock.on('order.updated', onOrder);
     sock.on('order.status_changed', r);
     sock.on('session.closed', r);
     sock.on('session.payment_added', r);
     sock.on('session.payment_removed', r);
     const id = setInterval(load, 15000);
     return () => {
-      sock.off('order.created', r); sock.off('order.updated', r); sock.off('order.status_changed', r);
-      sock.off('session.closed', r); sock.off('session.payment_added', r); sock.off('session.payment_removed', r);
+      sock.off('order.created', onOrder); 
+      sock.off('order.updated', onOrder); 
+      sock.off('order.status_changed', r);
+      sock.off('session.closed', r); 
+      sock.off('session.payment_added', r); 
+      sock.off('session.payment_removed', r);
       clearInterval(id);
     };
   }, []);
@@ -84,10 +97,11 @@ export default function CashierPage() {
     finally { setBusy(false); }
   }
 
-  function logout() { localStorage.removeItem('md:staff'); router.push('/admin/login'); }
+  function logout() { clearStaff(); router.push('/admin/login'); }
 
   return (
     <main className="min-h-screen p-4">
+      <PwaHead manifest="/manifest-cashier.json" />
       <header className="flex justify-between items-center mb-5">
         <div>
           <div className="text-2xl font-bold">💰 Caixa</div>
@@ -169,6 +183,13 @@ export default function CashierPage() {
       </div>
 
       {modal && <CashierSessionModal sessionId={modal} onClose={() => { setModal(null); load(); loadSummary(); }} />}
+
+      {/* Toast Notification */}
+      {toast && (
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[100] bg-brand-600 text-white px-6 py-3 rounded-full shadow-2xl animate-fade-in font-bold flex items-center gap-2">
+          <span className="text-xl">🔔</span> {toast}
+        </div>
+      )}
     </main>
   );
 }
