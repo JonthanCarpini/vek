@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { getSocket, joinRooms } from '@/lib/socket-client';
+import { formatBRL } from '@/lib/format';
 
 type Product = { id: string; name: string; description: string | null; price: number; imageUrl: string | null; available: boolean; preparationTimeMin: number; tags: string[]; };
 type Category = { id: string; name: string; imageUrl: string | null; products: Product[]; };
@@ -205,7 +206,7 @@ export default function ClientPage() {
               <div className="flex-1 min-w-0">
                 <div className="font-semibold truncate">{p.name}</div>
                 {p.description && <div className="text-xs text-gray-400 line-clamp-2">{p.description}</div>}
-                <div className="mt-1 text-brand-500 font-bold">R$ {p.price.toFixed(2)}</div>
+                <div className="mt-1 text-brand-500 font-bold">{formatBRL(p.price)}</div>
               </div>
             </div>
           ))}
@@ -237,7 +238,7 @@ export default function ClientPage() {
             <div className="flex flex-col gap-2">
               {activeOrders.slice(0, 3).map((o) => (
                 <div key={o.id} className="flex items-center justify-between">
-                  <div className="text-sm">#{o.sequenceNumber} • R$ {o.total.toFixed(2)}</div>
+                  <div className="text-sm">#{o.sequenceNumber} • {formatBRL(o.total)}</div>
                   <span className={`badge ${o.status === 'ready' ? 'badge-ok' : o.status === 'preparing' ? 'badge-warn' : 'badge-info'}`}>
                     {STATUS_LABEL[o.status]}
                   </span>
@@ -268,7 +269,7 @@ export default function ClientPage() {
             <div className="flex-1 min-w-0">
               <div className="font-semibold truncate">{p.name}</div>
               {p.description && <div className="text-xs text-gray-400 line-clamp-2">{p.description}</div>}
-              <div className="mt-1 text-brand-500 font-bold">R$ {p.price.toFixed(2)}</div>
+              <div className="mt-1 text-brand-500 font-bold">{formatBRL(p.price)}</div>
               {!p.available && <div className="text-xs text-red-400">Indisponível</div>}
             </div>
           </button>
@@ -279,7 +280,7 @@ export default function ClientPage() {
       {cart.length > 0 && !cartOpen && (
         <button onClick={() => setCartOpen(true)}
           className="fixed bottom-20 left-1/2 -translate-x-1/2 btn btn-primary shadow-xl">
-          🛒 {cartCount} item(s) • R$ {cartTotal.toFixed(2)}
+          🛒 {cartCount} item(s) • {formatBRL(cartTotal)}
         </button>
       )}
 
@@ -302,7 +303,7 @@ export default function ClientPage() {
                 <div key={x.productId} className="flex items-center gap-2">
                   <div className="flex-1">
                     <div className="font-medium">{x.name}</div>
-                    <div className="text-sm text-gray-400">R$ {(x.price * x.quantity).toFixed(2)}</div>
+                    <div className="text-sm text-gray-400">{formatBRL(x.price * x.quantity)}</div>
                   </div>
                   <button onClick={() => changeQty(x.productId, -1)} className="btn btn-ghost px-3">−</button>
                   <span className="w-6 text-center">{x.quantity}</span>
@@ -311,7 +312,7 @@ export default function ClientPage() {
               ))}
             </div>
             <div className="mt-4 flex justify-between text-lg font-bold">
-              <span>Total</span><span>R$ {cartTotal.toFixed(2)}</span>
+              <span>Total</span><span>{formatBRL(cartTotal)}</span>
             </div>
             <button onClick={submitOrder} disabled={loading} className="btn btn-primary w-full mt-4">
               {loading ? 'Enviando...' : 'Enviar pedido'}
@@ -344,13 +345,13 @@ export default function ClientPage() {
                     {o.items.map((i: any, idx: number) => (
                       <li key={idx} className="flex justify-between">
                         <span>{i.quantity}× {i.name}</span>
-                        <span className="text-gray-400">R$ {(Number(i.unitPrice) * i.quantity).toFixed(2)}</span>
+                        <span className="text-gray-400">{formatBRL(Number(i.unitPrice) * i.quantity)}</span>
                       </li>
                     ))}
                   </ul>
                   <div className="flex justify-between border-t border-gray-800 pt-2 font-semibold">
                     <span>Total</span>
-                    <span className="text-brand-500">R$ {Number(o.total).toFixed(2)}</span>
+                    <span className="text-brand-500">{formatBRL(o.total)}</span>
                   </div>
                 </div>
               ))}
@@ -359,7 +360,7 @@ export default function ClientPage() {
               <div className="mt-4 card p-3 bg-brand-600/10 border-brand-600/30">
                 <div className="flex justify-between font-bold text-lg">
                   <span>Total da mesa</span>
-                  <span className="text-brand-500">R$ {orders.filter((o) => o.status !== 'cancelled').reduce((s, o) => s + Number(o.total), 0).toFixed(2)}</span>
+                  <span className="text-brand-500">{formatBRL(orders.filter((o) => o.status !== 'cancelled').reduce((s, o) => s + Number(o.total), 0))}</span>
                 </div>
               </div>
             )}

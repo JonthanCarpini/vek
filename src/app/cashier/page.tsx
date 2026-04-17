@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiFetch, loadStaff } from '@/lib/staff-client';
 import { getSocket, joinRooms } from '@/lib/socket-client';
+import { formatBRL } from '@/lib/format';
 
 export default function CashierPage() {
   const router = useRouter();
@@ -75,7 +76,7 @@ export default function CashierPage() {
             <div className="border-t border-gray-800 pt-3 flex items-end justify-between">
               <div>
                 <div className="text-xs text-gray-500">Total</div>
-                <div className="text-2xl font-bold text-brand-500">R$ {Number(s.subtotal).toFixed(2)}</div>
+                <div className="text-2xl font-bold text-brand-500">{formatBRL(s.subtotal)}</div>
               </div>
               <button onClick={() => close(s.id, s.table?.number)} disabled={busy === s.id} className="btn btn-primary">
                 {busy === s.id ? 'Fechando...' : 'Fechar conta'}

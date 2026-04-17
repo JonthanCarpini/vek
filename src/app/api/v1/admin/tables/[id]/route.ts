@@ -11,7 +11,22 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const { id } = await params;
     const p = await parseBody(req, tableSchema.partial());
     if (!p.ok) return p.res;
-    const t = await prisma.tableEntity.update({ where: { id }, data: p.data as any });
+    const data = p.data as any;
+
+    // Se estiver liberando a mesa e houver sessão ativa, fecha a sessão.
+    if (data.status === 'free') {
+      const openSession = await prisma.tableSession.findFirst({
+        where: { tableId: id, closedAt: null },
+      });
+      if (openSession) {
+        await prisma.tableSession.update({
+          where: { id: openSession.id },
+          data: { closedAt: new Date(), status: 'closed' },
+        });
+      }
+    }
+
+    const t = await prisma.tableEntity.update({ where: { id }, data });
     return ok({ table: t });
   } catch (e) { return serverError(e); }
 }

@@ -1,9 +1,56 @@
 'use client';
-import { useEffect, useState } from 'react';
-import { apiFetch } from '@/lib/staff-client';
+import { useEffect, useRef, useState } from 'react';
+import { apiFetch, loadStaff } from '@/lib/staff-client';
 import { ImageUpload } from '@/components/ImageUpload';
+import { formatBRL } from '@/lib/format';
 
-const EMPTY = { categoryId: '', name: '', description: '', price: 0, imageUrl: '', available: true, active: true, preparationTimeMin: 15, station: 'cozinha' };
+function VideoUploadInline({ value, onChange }: { value: string; onChange: (url: string | null) => void }) {
+  const ref = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function handle(file: File) {
+    setBusy(true); setErr(null);
+    try {
+      const a = loadStaff();
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('kind', 'video');
+      const r = await fetch('/api/v1/admin/upload', {
+        method: 'POST',
+        headers: a?.token ? { Authorization: `Bearer ${a.token}` } : {},
+        body: fd,
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j?.error?.message || `HTTP ${r.status}`);
+      onChange(j.data.url);
+    } catch (e: any) {
+      setErr(e.message);
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <div className="mb-3 border border-brand-600/30 rounded-lg p-3 bg-brand-600/5">
+      <label className="label">🎬 Vídeo promocional (opcional, MP4/WebM até 50 MB)</label>
+      {value && (
+        <video src={value} controls className="w-full max-h-48 rounded mb-2 bg-black" />
+      )}
+      <div className="flex gap-2">
+        <input ref={ref} type="file" accept="video/mp4,video/webm,video/quicktime" className="hidden"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) handle(f); e.target.value = ''; }} />
+        <button type="button" onClick={() => ref.current?.click()} disabled={busy} className="btn btn-ghost text-sm">
+          {busy ? 'Enviando...' : value ? 'Trocar vídeo' : 'Enviar vídeo'}
+        </button>
+        {value && (
+          <button type="button" onClick={() => onChange(null)} className="btn btn-ghost text-sm text-red-400">Remover</button>
+        )}
+      </div>
+      {err && <div className="text-xs text-red-400 mt-1">{err}</div>}
+    </div>
+  );
+}
+
+const EMPTY = { categoryId: '', name: '', description: '', price: 0, imageUrl: '', available: true, active: true, preparationTimeMin: 15, station: 'cozinha', featured: false, videoUrl: '' };
 
 export default function Products() {
   const [products, setProducts] = useState<any[]>([]);
@@ -33,7 +80,9 @@ export default function Products() {
     e.preventDefault();
     try {
       const body: any = { ...form, price: Number(form.price), preparationTimeMin: Number(form.preparationTimeMin) };
-      if (!body.imageUrl) delete body.imageUrl; if (!body.description) delete body.description;
+      if (!body.imageUrl) delete body.imageUrl;
+      if (!body.description) delete body.description;
+      if (!body.videoUrl) delete body.videoUrl;
       if (editing) await apiFetch(`/api/v1/admin/products/${editing.id}`, { method: 'PUT', body: JSON.stringify(body) });
       else await apiFetch('/api/v1/admin/products', { method: 'POST', body: JSON.stringify(body) });
       setOpen(false); setEditing(null); setForm(EMPTY); load();
@@ -41,7 +90,7 @@ export default function Products() {
   }
   function openEdit(p: any) {
     setEditing(p);
-    setForm({ categoryId: p.categoryId, name: p.name, description: p.description || '', price: Number(p.price), imageUrl: p.imageUrl || '', available: p.available, active: p.active, preparationTimeMin: p.preparationTimeMin, station: p.station });
+    setForm({ categoryId: p.categoryId, name: p.name, description: p.description || '', price: Number(p.price), imageUrl: p.imageUrl || '', available: p.available, active: p.active, preparationTimeMin: p.preparationTimeMin, station: p.station, featured: !!p.featured, videoUrl: p.videoUrl || '' });
     setOpen(true);
   }
   async function archive(id: string) {
@@ -86,7 +135,7 @@ export default function Products() {
             <div className="flex-1 min-w-0">
               <div className="font-semibold">{p.name}</div>
               <div className="text-xs text-gray-400">{p.category?.name}</div>
-              <div className="text-brand-500 font-bold">R$ {Number(p.price).toFixed(2)}</div>
+              <div className="text-brand-500 font-bold">{formatBRL(p.price)}</div>
               <div className="text-xs text-gray-500">{p.available ? 'Disponível' : 'Indisponível'} • {p.station}</div>
             </div>
             <div className="flex flex-col gap-1">
@@ -125,7 +174,16 @@ export default function Products() {
             <select className="input mb-3" value={form.station} onChange={(e) => setForm({ ...form, station: e.target.value })}>
               <option value="cozinha">Cozinha</option><option value="bar">Bar</option><option value="grill">Grill</option>
             </select>
-            <label className="flex items-center gap-2 mb-3"><input type="checkbox" checked={form.available} onChange={(e) => setForm({ ...form, available: e.target.checked })} /> Disponível</label>
+            <div className="flex gap-4 mb-3 flex-wrap">
+              <label className="flex items-center gap-2"><input type="checkbox" checked={form.available} onChange={(e) => setForm({ ...form, available: e.target.checked })} /> Disponível</label>
+              <label className="flex items-center gap-2"><input type="checkbox" checked={form.featured} onChange={(e) => setForm({ ...form, featured: e.target.checked })} /> ⭐ Destaque (Painel TV)</label>
+            </div>
+            {form.featured && (
+              <VideoUploadInline
+                value={form.videoUrl}
+                onChange={(url) => setForm({ ...form, videoUrl: url || '' })}
+              />
+            )}
             <div className="flex gap-2">
               <button className="btn btn-primary flex-1">Salvar</button>
               <button type="button" onClick={() => setOpen(false)} className="btn btn-ghost">Cancelar</button>

@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { apiFetch, loadStaff } from '@/lib/staff-client';
 import { getSocket, joinRooms } from '@/lib/socket-client';
+import { formatBRL } from '@/lib/format';
 
 const STATUS_FILTERS = ['all', 'received', 'accepted', 'preparing', 'ready', 'delivered', 'cancelled'];
 const STATUS_LABEL: Record<string, string> = {
@@ -78,7 +79,7 @@ export default function AdminOrders() {
                 <td className="p-3">{o.table?.number}</td>
                 <td className="p-3">{o.session?.customerName}</td>
                 <td className="p-3">{o.items.length}</td>
-                <td className="p-3 font-semibold">R$ {Number(o.total).toFixed(2)}</td>
+                <td className="p-3 font-semibold">{formatBRL(o.total)}</td>
                 <td className="p-3"><span className="badge">{STATUS_LABEL[o.status]}</span></td>
                 <td className="p-3 text-gray-400">{new Date(o.createdAt).toLocaleTimeString('pt-BR')}</td>
                 <td className="p-3">

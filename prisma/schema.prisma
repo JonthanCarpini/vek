@@ -66,7 +66,7 @@ model TableEntity {
   number    Int
   label     String?
   qrToken   String   @unique
-  status    String   @default("free") // free | occupied | disabled
+  status    String   @default("free") // free | occupied | disabled | reserved
   capacity  Int      @default(4)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -129,6 +129,8 @@ model Product {
   preparationTimeMin   Int      @default(15)
   station              String   @default("cozinha") // cozinha | bar | grill
   tags                 String?  @db.Text
+  featured             Boolean  @default(false)
+  videoUrl             String?
   sortOrder            Int      @default(0)
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt

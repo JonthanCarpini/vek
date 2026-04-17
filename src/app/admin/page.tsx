@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/staff-client';
 import { getSocket, joinRooms } from '@/lib/socket-client';
 import { loadStaff } from '@/lib/staff-client';
+import { formatBRL } from '@/lib/format';
 
 export default function AdminDashboard() {
   const [m, setM] = useState<any>(null);
@@ -24,8 +25,8 @@ export default function AdminDashboard() {
 
   const cards = [
     { label: 'Pedidos hoje', value: m?.ordersToday ?? '—', icon: '🧾' },
-    { label: 'Receita hoje', value: m ? `R$ ${m.revenueToday.toFixed(2)}` : '—', icon: '💰' },
-    { label: 'Ticket médio', value: m ? `R$ ${m.avgTicket.toFixed(2)}` : '—', icon: '📊' },
+    { label: 'Receita hoje', value: m ? formatBRL(m.revenueToday) : '—', icon: '💰' },
+    { label: 'Ticket médio', value: m ? formatBRL(m.avgTicket) : '—', icon: '📊' },
     { label: 'Mesas ocupadas', value: m?.openTables ?? '—', icon: '🪑' },
     { label: 'Pedidos ativos', value: m?.activeOrders ?? '—', icon: '⏱️' },
     { label: 'Chamadas pendentes', value: m?.pendingCalls ?? '—', icon: '🙋' },

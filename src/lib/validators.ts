@@ -38,6 +38,8 @@ export const productSchema = z.object({
   station: z.enum(['cozinha', 'bar', 'grill']).optional(),
   sortOrder: z.number().int().optional(),
   tags: z.string().optional().nullable(),
+  featured: z.boolean().optional(),
+  videoUrl: z.string().max(500).optional().nullable(),
 });
 
 export const categorySchema = z.object({
@@ -51,6 +53,7 @@ export const tableSchema = z.object({
   number: z.number().int().min(1),
   label: z.string().max(40).optional().nullable(),
   capacity: z.number().int().min(1).max(50).optional(),
+  status: z.enum(['free', 'occupied', 'disabled', 'reserved']).optional(),
 });
 
 export const userSchema = z.object({

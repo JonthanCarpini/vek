@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/staff-client';
+import { formatBRL } from '@/lib/format';
 
 export default function Reports() {
   const [data, setData] = useState<any>(null);
@@ -25,8 +26,8 @@ export default function Reports() {
         <>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
             <div className="card p-5"><div className="text-sm text-gray-400">Pedidos</div><div className="text-3xl font-bold">{data.totals.orders}</div></div>
-            <div className="card p-5"><div className="text-sm text-gray-400">Receita total</div><div className="text-3xl font-bold">R$ {data.totals.revenue.toFixed(2)}</div></div>
-            <div className="card p-5"><div className="text-sm text-gray-400">Ticket médio</div><div className="text-3xl font-bold">R$ {data.totals.orders ? (data.totals.revenue / data.totals.orders).toFixed(2) : '0.00'}</div></div>
+            <div className="card p-5"><div className="text-sm text-gray-400">Receita total</div><div className="text-3xl font-bold">{formatBRL(data.totals.revenue)}</div></div>
+            <div className="card p-5"><div className="text-sm text-gray-400">Ticket médio</div><div className="text-3xl font-bold">{formatBRL(data.totals.orders ? data.totals.revenue / data.totals.orders : 0)}</div></div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -39,7 +40,7 @@ export default function Reports() {
                     <tr key={d.date} className="border-t border-[color:var(--border)]">
                       <td className="p-2">{new Date(d.date).toLocaleDateString('pt-BR')}</td>
                       <td className="p-2 text-right">{d.orders}</td>
-                      <td className="p-2 text-right">R$ {d.revenue.toFixed(2)}</td>
+                      <td className="p-2 text-right">{formatBRL(d.revenue)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -55,7 +56,7 @@ export default function Reports() {
                     <tr key={p.name} className="border-t border-[color:var(--border)]">
                       <td className="p-2">{p.name}</td>
                       <td className="p-2 text-right">{p.quantity}</td>
-                      <td className="p-2 text-right">R$ {p.revenue.toFixed(2)}</td>
+                      <td className="p-2 text-right">{formatBRL(p.revenue)}</td>
                     </tr>
                   ))}
                 </tbody>

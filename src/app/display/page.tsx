@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { getSocket } from '@/lib/socket-client';
+import { formatBRL } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
 
@@ -87,7 +88,7 @@ export default function DisplayPage() {
                 <div className="text-xs uppercase tracking-widest text-gray-500">{featured.category?.name}</div>
                 <div className="text-3xl font-bold mt-1">{featured.name}</div>
                 <div className="text-gray-300 mt-2 flex-1">{featured.description}</div>
-                <div className="text-4xl font-extrabold mt-4" style={{ color: primary }}>R$ {Number(featured.price).toFixed(2)}</div>
+                <div className="text-4xl font-extrabold mt-4" style={{ color: primary }}>{formatBRL(featured.price)}</div>
               </div>
             </div>
           ) : (
