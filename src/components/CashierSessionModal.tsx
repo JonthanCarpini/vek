@@ -16,6 +16,7 @@ export function CashierSessionModal({ sessionId, onClose }: { sessionId: string;
   const [data, setData] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [enabledMethods, setEnabledMethods] = useState<string[]>(['cash', 'credit', 'debit', 'pix']);
 
   // Form de novo pagamento
   const [method, setMethod] = useState<string>('cash');
@@ -27,10 +28,21 @@ export function CashierSessionModal({ sessionId, onClose }: { sessionId: string;
   // Dividir a conta
   const [splitN, setSplitN] = useState<number>(2);
 
-  useEffect(() => { load(); }, [sessionId]);
+  useEffect(() => { load(); loadMethods(); }, [sessionId]);
   async function load() {
     try { const d = await apiFetch(`/api/v1/cashier/sessions/${sessionId}`); setData(d.session); }
     catch (e: any) { setErr(e.message); }
+  }
+  async function loadMethods() {
+    try {
+      const d = await apiFetch('/api/v1/admin/settings');
+      const list = (d.unit?.paymentMethods || 'cash,credit,debit,pix')
+        .split(',').map((s: string) => s.trim()).filter(Boolean);
+      if (list.length > 0) {
+        setEnabledMethods(list);
+        if (!list.includes(method)) setMethod(list[0]);
+      }
+    } catch {}
   }
 
   async function addPayment(e?: React.FormEvent) {
@@ -156,7 +168,7 @@ export function CashierSessionModal({ sessionId, onClose }: { sessionId: string;
               <div className="font-semibold">Adicionar pagamento</div>
               <div className="grid grid-cols-2 gap-2">
                 <select value={method} onChange={(e) => setMethod(e.target.value)} className="input">
-                  {Object.entries(METHOD_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                  {enabledMethods.map((k) => <option key={k} value={k}>{METHOD_LABELS[k] || k}</option>)}
                 </select>
                 <input className="input" placeholder="Valor (ex: 32,90)" value={amount} onChange={(e) => setAmount(e.target.value)} required />
                 {method === 'cash' && (
