@@ -11,7 +11,24 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const { id } = await params;
     const p = await parseBody(req, productSchema.partial());
     if (!p.ok) return p.res;
-    const product = await prisma.product.update({ where: { id }, data: p.data as any });
+    const { ingredients, ...rest } = p.data as any;
+    const product = await prisma.$transaction(async (tx: any) => {
+      const updated = await tx.product.update({ where: { id }, data: rest });
+      if (Array.isArray(ingredients)) {
+        await tx.productIngredient.deleteMany({ where: { productId: id } });
+        if (ingredients.length > 0) {
+          await tx.productIngredient.createMany({
+            data: ingredients.map((i: any) => ({
+              productId: id, ingredientId: i.ingredientId, quantity: i.quantity, optional: !!i.optional,
+            })),
+          });
+        }
+      }
+      return tx.product.findUnique({
+        where: { id },
+        include: { ingredients: { include: { ingredient: true } } },
+      });
+    });
     return ok({ product });
   } catch (e) { return serverError(e); }
 }

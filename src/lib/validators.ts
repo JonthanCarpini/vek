@@ -40,6 +40,11 @@ export const productSchema = z.object({
   tags: z.string().optional().nullable(),
   featured: z.boolean().optional(),
   videoUrl: z.string().max(500).optional().nullable(),
+  ingredients: z.array(z.object({
+    ingredientId: z.string().min(1),
+    quantity: z.number().positive(),
+    optional: z.boolean().optional().default(false),
+  })).optional(),
 });
 
 export const categorySchema = z.object({
@@ -115,6 +120,26 @@ export const closeSessionSchema = z.object({
   // Se enviar payments aqui, eles serão criados antes de fechar.
   payments: z.array(sessionPaymentSchema).optional().default([]),
   force: z.boolean().optional().default(false), // ignora diferença
+});
+
+export const ingredientSchema = z.object({
+  name: z.string().min(1).max(80),
+  unitOfMeasure: z.enum(['un', 'g', 'kg', 'ml', 'L']).default('un'),
+  stock: z.number().min(0).optional(),
+  minStock: z.number().min(0).optional(),
+  cost: z.number().min(0).optional(),
+  active: z.boolean().optional(),
+});
+
+export const stockAdjustSchema = z.object({
+  delta: z.number(),
+  reason: z.string().max(200).optional(),
+});
+
+export const productIngredientItem = z.object({
+  ingredientId: z.string().min(1),
+  quantity: z.number().positive(),
+  optional: z.boolean().optional().default(false),
 });
 
 export const settingsSchema = z.object({
