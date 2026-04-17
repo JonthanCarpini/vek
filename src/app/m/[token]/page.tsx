@@ -52,13 +52,21 @@ export default function ClientPage() {
     // Tenta carregar dados salvos do cliente para pré-preenchimento
     const savedName = localStorage.getItem('md:customer:name');
     const savedPhone = localStorage.getItem('md:customer:phone');
+
+    // Se for PWA e tiver dados salvos, tenta check-in automático se não houver sessão ativa
+    const isPWA = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+    const savedSession = localStorage.getItem(`md:session:${qrToken}`);
+    
+    if (!savedSession && savedName && savedPhone && isPWA) {
+      autoCheckin(savedName, savedPhone);
+    }
+
     if (savedName) setName(savedName);
     if (savedPhone) setPhone(savedPhone);
 
-    const saved = localStorage.getItem(`md:session:${qrToken}`);
-    if (saved) {
+    if (savedSession) {
       try {
-        const d = JSON.parse(saved);
+        const d = JSON.parse(savedSession);
         setToken(d.token);
         setSession(d.session);
       } catch {
@@ -67,6 +75,23 @@ export default function ClientPage() {
     }
     loadUnit();
   }, [qrToken]);
+
+  async function autoCheckin(n: string, p: string) {
+    try {
+      const r = await fetch('/api/v1/public/checkin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ qrToken, name: n, phone: p }),
+      });
+      const j = await r.json();
+      if (r.ok) {
+        setToken(j.data.token);
+        setSession(j.data.session);
+        localStorage.setItem(`md:session:${qrToken}`, JSON.stringify(j.data));
+        setStep('menu');
+      }
+    } catch {}
+  }
 
   useEffect(() => {
     if (token) {
@@ -109,8 +134,18 @@ export default function ClientPage() {
     setCart([]);
   }
 
-  function handleExitTable() {
-    // Se não houver pedidos, apenas faz logout e volta para o início (index)
+  async function handleExitTable() {
+    // Se não houver pedidos, cancela a sessão no servidor para liberar a mesa
+    if (token) {
+      try {
+        await fetch('/api/v1/public/session/exit', {
+          method: 'POST',
+          headers: { 'x-session-token': token }
+        });
+      } catch (e) {
+        console.error('Erro ao sair da mesa:', e);
+      }
+    }
     localStorage.removeItem(`md:session:${qrToken}`);
     window.location.href = '/';
   }
