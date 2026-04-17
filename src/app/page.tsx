@@ -92,7 +92,7 @@ export default function Home() {
       </section>
 
       {/* Ações Principais Floating */}
-      <section className="px-6 -mt-16 relative z-20 space-y-4 max-w-md mx-auto">
+      <section className="px-6 -mt-16 relative z-20 max-w-md mx-auto flex flex-col gap-3">
         {session ? (
           <Link 
             href={`/m/${session.token}`}
