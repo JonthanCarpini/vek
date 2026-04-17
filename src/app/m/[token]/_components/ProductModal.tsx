@@ -59,6 +59,19 @@ export function ProductModal({ product, onClose, onAdd, primaryColor }: Props) {
             <p className="text-sm text-gray-300 mt-3 leading-relaxed">{product.description}</p>
           )}
 
+          {product.ingredients && product.ingredients.length > 0 && (
+            <div className="mt-4">
+              <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Ingredientes</div>
+              <div className="flex flex-wrap gap-1.5">
+                {product.ingredients.map((ing) => (
+                  <span key={ing} className="text-xs px-2 py-1 rounded-lg bg-gray-500/10 text-gray-300 border border-gray-500/20">
+                    {ing}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
           {product.tags?.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mt-3">
               {product.tags.map((t) => (

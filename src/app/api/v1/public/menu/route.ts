@@ -21,6 +21,12 @@ export async function GET(req: NextRequest) {
         products: {
           where: { active: true },
           orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+          include: {
+            ingredients: {
+              where: { ingredient: { active: true } },
+              include: { ingredient: { select: { name: true } } },
+            },
+          },
         },
       },
     });
@@ -39,6 +45,7 @@ export async function GET(req: NextRequest) {
           available: p.available,
           preparationTimeMin: p.preparationTimeMin,
           tags: p.tags ? p.tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
+          ingredients: p.ingredients.map((i) => i.ingredient.name),
         })),
       })),
     });

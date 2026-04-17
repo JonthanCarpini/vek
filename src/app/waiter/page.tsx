@@ -99,7 +99,20 @@ export default function WaiterPage() {
                 <span className="text-xs text-gray-400">{elapsed(c.createdAt)}</span>
               </div>
               <div className="text-sm text-gray-300 mb-1">{c.session?.customerName}</div>
-              <div className="text-xl mb-3">{TYPE_LABEL[c.type]}</div>
+              <div className="flex flex-col gap-1 mb-3">
+                <div className="text-xl font-semibold">{TYPE_LABEL[c.type]}</div>
+                {c.reason && (
+                  <div className="text-sm bg-amber-500/10 text-amber-200 p-2 rounded-lg border border-amber-500/20 italic">
+                    "{c.reason}"
+                  </div>
+                )}
+                {c.type === 'bill' && c.paymentHint && (
+                  <div className="text-sm bg-blue-500/10 text-blue-200 p-2 rounded-lg border border-blue-500/20">
+                    💳 Pagamento: <b>{c.paymentHint}</b>
+                    {c.splitCount && ` (Dividir em ${c.splitCount})`}
+                  </div>
+                )}
+              </div>
               <button onClick={() => attend(c.id)} className="btn btn-primary w-full">Atender</button>
             </div>
           ))}

@@ -97,6 +97,7 @@ function ProductRow({ product, onClick, primaryColor }: { product: Product; onCl
     <button
       onClick={onClick}
       disabled={!product.available}
+      title={product.ingredients?.length ? `Ingredientes: ${product.ingredients.join(', ')}` : undefined}
       className="w-full card p-3 flex gap-3 text-left hover:border-[color:var(--border-hover)] active:scale-[0.99] transition disabled:opacity-50"
     >
       {product.imageUrl ? (

@@ -7,6 +7,7 @@ export type Product = {
   available: boolean;
   preparationTimeMin: number;
   tags: string[];
+  ingredients?: string[];
 };
 
 export type Category = {
