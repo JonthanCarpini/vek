@@ -4,136 +4,169 @@ import { useParams } from 'next/navigation';
 import { getSocket, joinRooms } from '@/lib/socket-client';
 import { formatBRL } from '@/lib/format';
 
-type Product = { id: string; name: string; description: string | null; price: number; imageUrl: string | null; available: boolean; preparationTimeMin: number; tags: string[]; };
-type Category = { id: string; name: string; imageUrl: string | null; products: Product[]; };
-type CartItem = { productId: string; name: string; price: number; quantity: number; notes?: string };
-type Order = { id: string; sequenceNumber: number; status: string; total: number; createdAt: string; items: any[] };
+import { MenuTab } from './_components/MenuTab';
+import { OrdersTab } from './_components/OrdersTab';
+import { BillTab } from './_components/BillTab';
+import { CartDrawer } from './_components/CartDrawer';
+import { ProductModal } from './_components/ProductModal';
+import { CallWaiterModal } from './_components/CallWaiterModal';
+import { BillRequestModal } from './_components/BillRequestModal';
+import type { Category, Product, CartItem, Order, Call, Unit } from './_components/types';
+import { STATUS_LABEL } from './_components/types';
 
-const STATUS_LABEL: Record<string, string> = {
-  received: 'Recebido', accepted: 'Aceito', preparing: 'Em preparo',
-  ready: 'Pronto', delivered: 'Entregue', cancelled: 'Cancelado',
-};
+type Tab = 'menu' | 'orders' | 'bill';
 
 export default function ClientPage() {
   const params = useParams<{ token: string }>();
   const qrToken = params.token;
+
+  // -- State --
   const [step, setStep] = useState<'intro' | 'checkin' | 'menu' | 'browse'>('intro');
+  const [tab, setTab] = useState<Tab>('menu');
   const [token, setToken] = useState<string>('');
   const [session, setSession] = useState<any>(null);
-  const [name, setName] = useState(''); const [phone, setPhone] = useState('');
-  const [loading, setLoading] = useState(false); const [err, setErr] = useState<string | null>(null);
-
+  const [unit, setUnit] = useState<Unit>({ primaryColor: '#f97316' });
   const [categories, setCategories] = useState<Category[]>([]);
-  const [activeCat, setActiveCat] = useState<string | null>(null);
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [cartOpen, setCartOpen] = useState(false);
   const [orders, setOrders] = useState<Order[]>([]);
-  const [toast, setToast] = useState<string | null>(null);
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const [readyAlert, setReadyAlert] = useState<any>(null);
+  const [calls, setCalls] = useState<Call[]>([]);
+  const [cart, setCart] = useState<CartItem[]>([]);
 
-  // Recupera sessão do localStorage
+  // -- UI Control --
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [cartOpen, setCartOpen] = useState(false);
+  const [showCallWaiter, setShowCallWaiter] = useState(false);
+  const [showBillRequest, setShowBillRequest] = useState(false);
+  const [readyAlert, setReadyAlert] = useState<Order | null>(null);
+
+  // -- Checkin State --
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+
+  const primaryColor = unit.primaryColor || '#f97316';
+
+  // -- Init & Data Loading --
   useEffect(() => {
     const saved = localStorage.getItem(`md:session:${qrToken}`);
     if (saved) {
       try {
         const d = JSON.parse(saved);
-        setToken(d.token); setSession(d.session); setStep('menu');
+        setToken(d.token);
+        setSession(d.session);
+        setStep('menu');
       } catch {}
     }
+    loadUnit();
   }, [qrToken]);
 
   useEffect(() => {
     if (step === 'menu' && token) {
-      loadMenu(); loadOrders();
+      loadAll();
       joinRooms([`session:${session.id}`]);
       const s = getSocket();
-      const onStatus = (p: any) => { loadOrders(); showToast(`Pedido #${p.sequenceNumber ?? ''}: ${STATUS_LABEL[p.status] || p.status}`); };
-      const onReady = (p: any) => {
+      s.on('order.status_changed', (p) => {
+        loadOrders();
+        showToast(`Pedido #${p.sequenceNumber}: ${STATUS_LABEL[p.status] || p.status}`);
+      });
+      s.on('order.ready', (p) => {
         loadOrders();
         setReadyAlert(p);
-        try {
-          // Beep curto usando Web Audio (funciona sem asset).
-          const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          osc.type = 'sine'; osc.frequency.value = 880;
-          gain.gain.setValueAtTime(0.001, ctx.currentTime);
-          gain.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime + 0.01);
-          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
-          osc.connect(gain); gain.connect(ctx.destination);
-          osc.start(); osc.stop(ctx.currentTime + 0.6);
-        } catch {}
-        if ('vibrate' in navigator) { try { navigator.vibrate([200, 80, 200]); } catch {} }
+        playBeep();
+        if ('vibrate' in navigator) navigator.vibrate([200, 100, 200]);
+      });
+      s.on('call.attended', () => {
+        loadCalls();
+        showToast('Chamada atendida!');
+      });
+
+      // Polling de fallback para chamadas
+      const t = setInterval(loadCalls, 30000);
+      return () => {
+        s.off('order.status_changed');
+        s.off('order.ready');
+        s.off('call.attended');
+        clearInterval(t);
       };
-      s.on('order.status_changed', onStatus);
-      s.on('order.updated', () => loadOrders());
-      s.on('order.ready', onReady);
-      return () => { s.off('order.status_changed', onStatus); s.off('order.updated'); s.off('order.ready', onReady); };
-    }
-    if (step === 'browse') {
+    } else if (step === 'browse' || step === 'intro') {
       loadMenuPublic();
     }
   }, [step, token]);
 
-  async function loadMenuPublic() {
-    const r = await fetch(`/api/v1/public/menu?qrToken=${encodeURIComponent(qrToken)}`);
-    const j = await r.json();
-    if (r.ok) {
-      setCategories(j.data.categories);
-      if (j.data.categories[0]) setActiveCat(j.data.categories[0].id);
-    } else {
-      setErr(j?.error?.message || 'Erro ao carregar cardápio');
-    }
+  async function loadUnit() {
+    try {
+      const r = await fetch(`/api/v1/public/unit?qrToken=${qrToken}`);
+      const j = await r.json();
+      if (r.ok) setUnit(j.data);
+    } catch {}
   }
 
-  function showToast(m: string) { setToast(m); setTimeout(() => setToast(null), 3000); }
-
-  async function checkin(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true); setErr(null);
+  async function loadMenuPublic() {
     try {
-      const r = await fetch('/api/v1/public/checkin', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ qrToken, name, phone }),
-      });
+      const r = await fetch(`/api/v1/public/menu?qrToken=${qrToken}`);
       const j = await r.json();
-      if (!r.ok) throw new Error(j?.error?.message || 'Erro no check-in');
-      setToken(j.data.token); setSession(j.data.session);
-      localStorage.setItem(`md:session:${qrToken}`, JSON.stringify(j.data));
-      setStep('menu');
-    } catch (e: any) { setErr(e.message); } finally { setLoading(false); }
+      if (r.ok) setCategories(j.data.categories);
+    } catch {}
+  }
+
+  async function loadAll() {
+    loadMenu();
+    loadOrders();
+    loadCalls();
   }
 
   async function loadMenu() {
     const r = await fetch('/api/v1/public/menu', { headers: { 'x-session-token': token } });
     const j = await r.json();
-    if (r.ok) {
-      setCategories(j.data.categories);
-      if (j.data.categories[0]) setActiveCat(j.data.categories[0].id);
-    }
+    if (r.ok) setCategories(j.data.categories);
   }
+
   async function loadOrders() {
     const r = await fetch('/api/v1/public/orders', { headers: { 'x-session-token': token } });
     const j = await r.json();
     if (r.ok) setOrders(j.data.orders);
   }
 
-  function addToCart(p: Product) {
-    setCart((c) => {
-      const ex = c.find((x) => x.productId === p.id);
-      if (ex) return c.map((x) => x.productId === p.id ? { ...x, quantity: x.quantity + 1 } : x);
-      return [...c, { productId: p.id, name: p.name, price: p.price, quantity: 1 }];
-    });
-    showToast(`${p.name} adicionado`);
+  async function loadCalls() {
+    const r = await fetch('/api/v1/public/calls', { headers: { 'x-session-token': token } });
+    const j = await r.json();
+    if (r.ok) setCalls(j.data.calls);
   }
-  function changeQty(pid: string, delta: number) {
-    setCart((c) => c.map((x) => x.productId === pid ? { ...x, quantity: Math.max(0, x.quantity + delta) } : x).filter((x) => x.quantity > 0));
-  }
-  const cartTotal = useMemo(() => cart.reduce((s, x) => s + x.price * x.quantity, 0), [cart]);
-  const cartCount = useMemo(() => cart.reduce((s, x) => s + x.quantity, 0), [cart]);
 
-  async function submitOrder() {
+  // -- Handlers --
+  async function handleCheckin(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true); setErr(null);
+    try {
+      const r = await fetch('/api/v1/public/checkin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ qrToken, name, phone }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j?.error?.message || 'Erro no check-in');
+      setToken(j.data.token);
+      setSession(j.data.session);
+      localStorage.setItem(`md:session:${qrToken}`, JSON.stringify(j.data));
+      setStep('menu');
+    } catch (e: any) { setErr(e.message); }
+    finally { setLoading(false); }
+  }
+
+  function handleAddToCart(p: Product, quantity: number, notes: string) {
+    setCart((prev) => {
+      // Dedupe: se já existe item igual (mesmo produto e mesma observação), soma
+      const existing = prev.find((x) => x.productId === p.id && x.notes === notes);
+      if (existing) {
+        return prev.map((x) => x === existing ? { ...x, quantity: x.quantity + quantity } : x);
+      }
+      return [...prev, { productId: p.id, name: p.name, price: p.price, quantity, notes, imageUrl: p.imageUrl }];
+    });
+    showToast(`${p.name} adicionado ao carrinho`);
+  }
+
+  async function handleSubmitOrder() {
     if (!cart.length) return;
     setLoading(true);
     try {
@@ -143,36 +176,101 @@ export default function ClientPage() {
         body: JSON.stringify({ items: cart.map((x) => ({ productId: x.productId, quantity: x.quantity, notes: x.notes })) }),
       });
       const j = await r.json();
-      if (!r.ok) throw new Error(j?.error?.message || 'Erro');
-      setCart([]); setCartOpen(false); showToast('Pedido enviado!'); loadOrders();
-    } catch (e: any) { showToast(e.message); } finally { setLoading(false); }
+      if (!r.ok) throw new Error(j?.error?.message || 'Erro ao enviar pedido');
+      setCart([]);
+      setCartOpen(false);
+      showToast('Pedido enviado com sucesso!');
+      loadOrders();
+      setTab('orders');
+    } catch (e: any) {
+      showToast(e.message);
+    } finally {
+      setLoading(false);
+    }
   }
 
-  async function call(type: 'waiter' | 'bill') {
-    await fetch('/api/v1/public/calls', {
-      method: 'POST', headers: { 'Content-Type': 'application/json', 'x-session-token': token },
-      body: JSON.stringify({ type }),
+  async function handleCallWaiter(reason: string) {
+    const r = await fetch('/api/v1/public/calls', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-session-token': token },
+      body: JSON.stringify({ type: 'waiter', reason }),
     });
-    showToast(type === 'waiter' ? 'Garçom chamado' : 'Pedido de conta enviado');
+    if (r.ok) {
+      showToast('Garçom chamado!');
+      loadCalls();
+    }
   }
 
+  async function handleBillRequest(paymentHint: string, splitCount?: number) {
+    const r = await fetch('/api/v1/public/calls', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-session-token': token },
+      body: JSON.stringify({ type: 'bill', paymentHint, splitCount }),
+    });
+    if (r.ok) {
+      showToast('Pedido de conta enviado!');
+      loadCalls();
+    }
+  }
+
+  async function handleCancelCall(id: string) {
+    const r = await fetch(`/api/v1/public/calls?id=${id}`, {
+      method: 'DELETE',
+      headers: { 'x-session-token': token },
+    });
+    if (r.ok) {
+      showToast('Chamada cancelada');
+      loadCalls();
+    }
+  }
+
+  // -- Utils --
+  function showToast(m: string) { setToast(m); setTimeout(() => setToast(null), 3000); }
+
+  function playBeep() {
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine'; osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(); osc.stop(ctx.currentTime + 0.6);
+    } catch {}
+  }
+
+  // -- UI Parts --
   if (step === 'intro') {
     return (
-      <main className="min-h-screen flex items-center justify-center p-5">
-        <div className="w-full max-w-md space-y-5">
+      <main className="min-h-screen flex items-center justify-center p-5 bg-[#0b0b0f] text-white">
+        <div className="w-full max-w-md space-y-6">
           <div className="text-center">
-            <div className="text-4xl mb-2">🍔</div>
-            <div className="text-3xl font-bold">Bem-vindo!</div>
-            <p className="text-gray-400 mt-2 text-sm">O que você quer fazer agora?</p>
+            {unit.logoUrl ? (
+              <img src={unit.logoUrl} alt={unit.name} className="h-20 mx-auto mb-4" />
+            ) : (
+              <div className="text-5xl mb-4">🍔</div>
+            )}
+            <h1 className="text-3xl font-black">{unit.name || 'Mesa Digital'}</h1>
+            <p className="text-gray-400 mt-2">Bem-vindo ao nosso autoatendimento!</p>
           </div>
-          <button onClick={() => setStep('checkin')} className="card p-5 w-full text-left hover:border-brand-600 transition">
-            <div className="text-xl font-bold">🍽️ Iniciar minha mesa</div>
-            <p className="text-sm text-gray-400 mt-1">Abra uma conta, peça pelo app e acompanhe o preparo em tempo real.</p>
-          </button>
-          <button onClick={() => setStep('browse')} className="card p-5 w-full text-left hover:border-brand-600 transition">
-            <div className="text-xl font-bold">📖 Apenas ver o cardápio</div>
-            <p className="text-sm text-gray-400 mt-1">Explore os produtos sem fazer pedido ainda.</p>
-          </button>
+          <div className="space-y-3">
+            <button onClick={() => setStep('checkin')} className="card p-5 w-full text-left hover:border-brand-600 transition flex items-center gap-4">
+              <span className="text-3xl">🍽️</span>
+              <div>
+                <div className="text-xl font-bold">Iniciar mesa</div>
+                <div className="text-xs text-gray-400">Fazer pedidos e acompanhar conta</div>
+              </div>
+            </button>
+            <button onClick={() => setStep('browse')} className="card p-5 w-full text-left hover:border-brand-600 transition flex items-center gap-4">
+              <span className="text-3xl">📖</span>
+              <div>
+                <div className="text-xl font-bold">Apenas cardápio</div>
+                <div className="text-xs text-gray-400">Ver fotos e preços sem pedir</div>
+              </div>
+            </button>
+          </div>
         </div>
       </main>
     );
@@ -180,231 +278,198 @@ export default function ClientPage() {
 
   if (step === 'checkin') {
     return (
-      <main className="min-h-screen flex items-center justify-center p-5">
-        <form onSubmit={checkin} className="card p-6 w-full max-w-md">
-          <button type="button" onClick={() => setStep('intro')} className="text-sm text-gray-400 mb-3">← Voltar</button>
-          <div className="text-3xl font-bold mb-1">Iniciar mesa 👋</div>
-          <p className="text-gray-400 mb-6 text-sm">Informe seus dados para começar</p>
-          <label className="label">Nome do responsável</label>
-          <input className="input mb-4" value={name} onChange={(e) => setName(e.target.value)} required minLength={2} />
-          <label className="label">Telefone</label>
-          <input className="input mb-5" value={phone} onChange={(e) => setPhone(e.target.value)} required inputMode="tel" placeholder="(11) 99999-9999" />
-          {err && <div className="text-red-400 text-sm mb-3">{err}</div>}
-          <button className="btn btn-primary w-full" disabled={loading}>{loading ? 'Entrando...' : 'Começar pedido'}</button>
-        </form>
+      <main className="min-h-screen flex flex-col p-6 bg-[#0b0b0f] text-white">
+        <button onClick={() => setStep('intro')} className="text-gray-400 mb-8 self-start">← Voltar</button>
+        <div className="w-full max-w-md mx-auto">
+          <h2 className="text-3xl font-black mb-1">Iniciar Mesa 🍽️</h2>
+          <p className="text-gray-400 mb-8">Informe seus dados para identificação dos pedidos.</p>
+          <form onSubmit={handleCheckin} className="space-y-4">
+            <div>
+              <label className="label">Seu Nome</label>
+              <input className="input" placeholder="Ex: João Silva" value={name} onChange={(e) => setName(e.target.value)} required minLength={2} />
+            </div>
+            <div>
+              <label className="label">WhatsApp</label>
+              <input className="input" type="tel" placeholder="(00) 00000-0000" value={phone} onChange={(e) => setPhone(e.target.value)} required />
+            </div>
+            {err && <div className="text-red-400 text-sm bg-red-400/10 p-3 rounded-lg border border-red-400/20">{err}</div>}
+            <button className="btn btn-primary w-full py-4 text-lg font-bold" disabled={loading} style={{ backgroundColor: primaryColor }}>
+              {loading ? 'Entrando...' : 'Começar a Pedir'}
+            </button>
+          </form>
+        </div>
       </main>
     );
   }
 
   if (step === 'browse') {
-    const activeCategoryBrowse = categories.find((c) => c.id === activeCat);
     return (
-      <main className="min-h-screen pb-16">
-        <header className="sticky top-0 z-20 bg-[color:var(--bg)]/90 backdrop-blur border-b border-[color:var(--border)] px-4 py-3 flex items-center justify-between">
-          <div>
-            <div className="text-xs text-gray-400">Apenas visualização</div>
-            <div className="text-lg font-bold">Cardápio</div>
+      <main className="min-h-screen bg-[#0b0b0f] text-white">
+        <header className="sticky top-0 z-30 bg-[#0b0b0f]/95 backdrop-blur-md border-b border-gray-800 p-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            {unit.logoUrl && <img src={unit.logoUrl} alt="" className="h-8" />}
+            <span className="font-bold">Cardápio</span>
           </div>
-          <button onClick={() => setStep('intro')} className="btn btn-primary text-sm">Iniciar mesa</button>
+          <button onClick={() => setStep('checkin')} className="btn btn-primary py-1.5 px-4 text-xs" style={{ backgroundColor: primaryColor }}>
+            Iniciar Mesa
+          </button>
         </header>
-        {err && <div className="p-4 text-red-400 text-sm">{err}</div>}
-        <div className="sticky top-[60px] z-10 bg-[color:var(--bg)]/90 backdrop-blur border-b border-[color:var(--border)] overflow-x-auto scroll-none px-3 py-2">
-          <div className="flex gap-2">
-            {categories.map((c) => (
-              <button key={c.id} onClick={() => setActiveCat(c.id)}
-                className={`px-3 py-1.5 rounded-full whitespace-nowrap text-sm ${activeCat === c.id ? 'bg-brand-600 text-white' : 'bg-[#1f1f2b] text-gray-300'}`}>
-                {c.name}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {activeCategoryBrowse?.products.map((p) => (
-            <div key={p.id} className="card p-3 flex gap-3">
-              {p.imageUrl ? <img src={p.imageUrl} alt="" className="w-20 h-20 rounded-lg object-cover" /> : <div className="w-20 h-20 rounded-lg bg-[#1f1f2b]" />}
-              <div className="flex-1 min-w-0">
-                <div className="font-semibold truncate">{p.name}</div>
-                {p.description && <div className="text-xs text-gray-400 line-clamp-2">{p.description}</div>}
-                <div className="mt-1 text-brand-500 font-bold">{formatBRL(p.price)}</div>
-              </div>
-            </div>
-          ))}
-        </div>
+        <MenuTab categories={categories} onSelectProduct={(p) => { setSelectedProduct(p); }} primaryColor={primaryColor} />
+        <ProductModal product={selectedProduct} onClose={() => setSelectedProduct(null)} onAdd={() => setStep('checkin')} primaryColor={primaryColor} />
       </main>
     );
   }
 
-  const activeCategory = categories.find((c) => c.id === activeCat);
-  const activeOrders = orders.filter((o) => o.status !== 'delivered' && o.status !== 'cancelled');
+  // -- Main View (step === 'menu') --
+  const subtotal = orders.filter((o) => o.status !== 'cancelled').reduce((s, o) => s + Number(o.total), 0);
+  const activeOrdersCount = orders.filter((o) => !['delivered', 'cancelled'].includes(o.status)).length;
+  const pendingCallsCount = calls.filter((c) => c.status === 'pending').length;
 
   return (
-    <main className="min-h-screen pb-36">
-      <header className="sticky top-0 z-20 bg-[color:var(--bg)]/90 backdrop-blur border-b border-[color:var(--border)] px-4 py-3 flex items-center justify-between">
-        <div>
-          <div className="text-xs text-gray-400">Mesa {session?.tableNumber} • {session?.customerName}</div>
-          <div className="text-lg font-bold">Cardápio</div>
-        </div>
-        <button onClick={() => call('waiter')} className="btn btn-ghost text-sm">🙋 Garçom</button>
-      </header>
-
-      {orders.length > 0 && (
-        <div className="px-4 pt-3">
-          <div className="card p-3">
-            <div className="flex items-center justify-between mb-2">
-              <div className="text-sm text-gray-400">Seus pedidos ({orders.length})</div>
-              <button onClick={() => setHistoryOpen(true)} className="text-xs text-brand-500 hover:underline">Ver todos</button>
-            </div>
-            <div className="flex flex-col gap-2">
-              {activeOrders.slice(0, 3).map((o) => (
-                <div key={o.id} className="flex items-center justify-between">
-                  <div className="text-sm">#{o.sequenceNumber} • {formatBRL(o.total)}</div>
-                  <span className={`badge ${o.status === 'ready' ? 'badge-ok' : o.status === 'preparing' ? 'badge-warn' : 'badge-info'}`}>
-                    {STATUS_LABEL[o.status]}
-                  </span>
-                </div>
-              ))}
-              {activeOrders.length === 0 && <div className="text-sm text-gray-500">Todos os pedidos foram entregues</div>}
-            </div>
+    <main className="min-h-screen bg-[#0b0b0f] text-white">
+      {/* Header Fixo */}
+      <header className="sticky top-0 z-30 bg-[#0b0b0f]/95 backdrop-blur-md border-b border-gray-800 px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          {unit.logoUrl ? (
+            <img src={unit.logoUrl} alt="" className="h-8 w-auto" />
+          ) : (
+            <span className="text-2xl">🍔</span>
+          )}
+          <div>
+            <div className="text-xs text-gray-500 leading-none">Mesa {session?.tableNumber}</div>
+            <div className="font-bold text-sm truncate max-w-[120px]">{session?.customerName}</div>
           </div>
         </div>
-      )}
+        <button onClick={() => setTab('bill')} className="bg-[#1f1f2b] px-3 py-1.5 rounded-xl text-right">
+          <div className="text-[10px] text-gray-500 leading-none">CONTA PARCIAL</div>
+          <div className="font-black text-sm" style={{ color: primaryColor }}>{formatBRL(subtotal)}</div>
+        </button>
+      </header>
 
-      <div className="sticky top-[60px] z-10 bg-[color:var(--bg)]/90 backdrop-blur border-b border-[color:var(--border)] overflow-x-auto scroll-none px-3 py-2">
-        <div className="flex gap-2">
-          {categories.map((c) => (
-            <button key={c.id} onClick={() => setActiveCat(c.id)}
-              className={`px-3 py-1.5 rounded-full whitespace-nowrap text-sm ${activeCat === c.id ? 'bg-brand-600 text-white' : 'bg-[#1f1f2b] text-gray-300'}`}>
-              {c.name}
-            </button>
-          ))}
-        </div>
+      {/* Conteúdo das Abas */}
+      <div className={tab === 'menu' ? 'block' : 'hidden'}>
+        <MenuTab categories={categories} onSelectProduct={setSelectedProduct} primaryColor={primaryColor} />
+      </div>
+      <div className={tab === 'orders' ? 'block' : 'hidden'}>
+        <OrdersTab orders={orders} primaryColor={primaryColor} onGoToMenu={() => setTab('menu')} />
+      </div>
+      <div className={tab === 'bill' ? 'block' : 'hidden'}>
+        <BillTab
+          orders={orders}
+          calls={calls}
+          unit={unit}
+          onCallWaiter={() => setShowCallWaiter(true)}
+          onRequestBill={() => setShowBillRequest(true)}
+          onCancelCall={handleCancelCall}
+          primaryColor={primaryColor}
+        />
       </div>
 
-      <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {activeCategory?.products.map((p) => (
-          <button key={p.id} onClick={() => addToCart(p)} disabled={!p.available}
-            className="card p-3 flex gap-3 text-left hover:border-brand-600 disabled:opacity-50">
-            {p.imageUrl ? <img src={p.imageUrl} alt="" className="w-20 h-20 rounded-lg object-cover" /> : <div className="w-20 h-20 rounded-lg bg-[#1f1f2b]" />}
-            <div className="flex-1 min-w-0">
-              <div className="font-semibold truncate">{p.name}</div>
-              {p.description && <div className="text-xs text-gray-400 line-clamp-2">{p.description}</div>}
-              <div className="mt-1 text-brand-500 font-bold">{formatBRL(p.price)}</div>
-              {!p.available && <div className="text-xs text-red-400">Indisponível</div>}
-            </div>
-          </button>
-        ))}
-      </div>
-
-      {/* Cart floating button */}
-      {cart.length > 0 && !cartOpen && (
-        <button onClick={() => setCartOpen(true)}
-          className="fixed bottom-20 left-1/2 -translate-x-1/2 btn btn-primary shadow-xl">
-          🛒 {cartCount} item(s) • {formatBRL(cartTotal)}
+      {/* Carrinho FAB */}
+      {tab === 'menu' && cart.length > 0 && !cartOpen && (
+        <button
+          onClick={() => setCartOpen(true)}
+          className="fixed bottom-24 left-1/2 -translate-x-1/2 z-40 btn btn-primary px-6 py-4 shadow-2xl flex items-center gap-3 active:scale-95 transition"
+          style={{ backgroundColor: primaryColor }}
+        >
+          <span className="text-xl">🛒</span>
+          <span className="font-bold">{cart.reduce((s, x) => s + x.quantity, 0)} itens • {formatBRL(cart.reduce((s, x) => s + x.price * x.quantity, 0))}</span>
         </button>
       )}
 
-      {/* Bottom FAB */}
-      <div className="fixed bottom-0 left-0 right-0 bg-[#0b0b0f] border-t border-[color:var(--border)] p-3 flex gap-2">
-        <button onClick={() => call('bill')} className="btn btn-ghost flex-1 text-sm">💳 Conta</button>
-        <button onClick={() => call('waiter')} className="btn btn-ghost flex-1 text-sm">🙋 Garçom</button>
-      </div>
+      {/* Bottom Navigation */}
+      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-[#0b0b0f]/95 backdrop-blur-md border-t border-gray-800 px-6 py-3 pb-6 flex justify-between items-center">
+        <NavBtn active={tab === 'menu'} onClick={() => setTab('menu')} icon="🍽️" label="Cardápio" color={primaryColor} />
+        <NavBtn
+          active={tab === 'orders'}
+          onClick={() => setTab('orders')}
+          icon="📋"
+          label="Pedidos"
+          color={primaryColor}
+          badge={activeOrdersCount > 0 ? activeOrdersCount : undefined}
+        />
+        <NavBtn
+          active={tab === 'bill'}
+          onClick={() => setTab('bill')}
+          icon="💳"
+          label="Conta"
+          color={primaryColor}
+          badge={pendingCallsCount > 0 ? pendingCallsCount : undefined}
+        />
+      </nav>
 
-      {/* Cart drawer */}
-      {cartOpen && (
-        <div className="fixed inset-0 z-40 bg-black/60 flex items-end" onClick={() => setCartOpen(false)}>
-          <div className="bg-[color:var(--card)] w-full rounded-t-2xl max-h-[80vh] overflow-y-auto p-4" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-4">
-              <div className="text-xl font-bold">Seu pedido</div>
-              <button onClick={() => setCartOpen(false)} className="text-gray-400">✕</button>
-            </div>
-            <div className="flex flex-col gap-2">
-              {cart.map((x) => (
-                <div key={x.productId} className="flex items-center gap-2">
-                  <div className="flex-1">
-                    <div className="font-medium">{x.name}</div>
-                    <div className="text-sm text-gray-400">{formatBRL(x.price * x.quantity)}</div>
-                  </div>
-                  <button onClick={() => changeQty(x.productId, -1)} className="btn btn-ghost px-3">−</button>
-                  <span className="w-6 text-center">{x.quantity}</span>
-                  <button onClick={() => changeQty(x.productId, 1)} className="btn btn-ghost px-3">+</button>
-                </div>
-              ))}
-            </div>
-            <div className="mt-4 flex justify-between text-lg font-bold">
-              <span>Total</span><span>{formatBRL(cartTotal)}</span>
-            </div>
-            <button onClick={submitOrder} disabled={loading} className="btn btn-primary w-full mt-4">
-              {loading ? 'Enviando...' : 'Enviar pedido'}
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Modais */}
+      <ProductModal
+        product={selectedProduct}
+        onClose={() => setSelectedProduct(null)}
+        onAdd={handleAddToCart}
+        primaryColor={primaryColor}
+      />
+      <CartDrawer
+        open={cartOpen}
+        onClose={() => setCartOpen(false)}
+        items={cart}
+        onUpdateQty={(pid, notes, delta) => {
+          setCart((prev) => prev.map((x) => x.productId === pid && x.notes === notes ? { ...x, quantity: Math.max(0, x.quantity + delta) } : x).filter((x) => x.quantity > 0));
+        }}
+        onConfirm={handleSubmitOrder}
+        primaryColor={primaryColor}
+        loading={loading}
+      />
+      <CallWaiterModal
+        open={showCallWaiter}
+        onClose={() => setShowCallWaiter(false)}
+        onConfirm={handleCallWaiter}
+        primaryColor={primaryColor}
+      />
+      <BillRequestModal
+        open={showBillRequest}
+        onClose={() => setShowBillRequest(false)}
+        onConfirm={handleBillRequest}
+        total={subtotal * (1 + (unit.serviceFee || 0) / 100)}
+        enabledMethods={(unit.paymentMethods || '').split(',').filter(Boolean)}
+        primaryColor={primaryColor}
+      />
 
-      {historyOpen && (
-        <div className="fixed inset-0 z-50 bg-black/70 flex items-end" onClick={() => setHistoryOpen(false)}>
-          <div className="bg-[color:var(--card)] w-full rounded-t-2xl max-h-[85vh] overflow-y-auto p-4" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-4">
-              <div className="text-xl font-bold">Histórico da mesa</div>
-              <button onClick={() => setHistoryOpen(false)} className="text-gray-400">✕</button>
-            </div>
-            {orders.length === 0 && <div className="text-gray-500 text-center py-8">Nenhum pedido ainda</div>}
-            <div className="flex flex-col gap-3">
-              {orders.map((o) => (
-                <div key={o.id} className="card p-3">
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <div className="font-bold">#{o.sequenceNumber}</div>
-                      <div className="text-xs text-gray-500">{new Date(o.createdAt).toLocaleTimeString('pt-BR')}</div>
-                    </div>
-                    <span className={`badge ${o.status === 'delivered' ? 'badge-ok' : o.status === 'ready' ? 'badge-ok' : o.status === 'cancelled' ? 'bg-red-600/20 text-red-300' : 'badge-warn'}`}>
-                      {STATUS_LABEL[o.status]}
-                    </span>
-                  </div>
-                  <ul className="text-sm space-y-1 mb-2">
-                    {o.items.map((i: any, idx: number) => (
-                      <li key={idx} className="flex justify-between">
-                        <span>{i.quantity}× {i.name}</span>
-                        <span className="text-gray-400">{formatBRL(Number(i.unitPrice) * i.quantity)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="flex justify-between border-t border-gray-800 pt-2 font-semibold">
-                    <span>Total</span>
-                    <span className="text-brand-500">{formatBRL(o.total)}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-            {orders.length > 0 && (
-              <div className="mt-4 card p-3 bg-brand-600/10 border-brand-600/30">
-                <div className="flex justify-between font-bold text-lg">
-                  <span>Total da mesa</span>
-                  <span className="text-brand-500">{formatBRL(orders.filter((o) => o.status !== 'cancelled').reduce((s, o) => s + Number(o.total), 0))}</span>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {toast && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 card px-4 py-2 text-sm z-50">{toast}</div>
-      )}
-
+      {/* Alerta de Pedido Pronto */}
       {readyAlert && (
-        <div className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-5" onClick={() => setReadyAlert(null)}>
-          <div className="bg-green-600 text-white rounded-3xl p-8 text-center max-w-md w-full animate-bounce" onClick={(e) => e.stopPropagation()}>
-            <div className="text-6xl mb-3">🔔</div>
-            <div className="text-3xl font-black mb-2">Pedido pronto!</div>
-            <div className="text-xl">
-              Seu pedido <b>#{readyAlert.sequenceNumber}</b> está pronto para retirada.
-            </div>
-            <button onClick={() => setReadyAlert(null)} className="mt-6 bg-white text-green-700 font-bold px-6 py-3 rounded-xl">
-              OK, vou retirar
+        <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-6" onClick={() => setReadyAlert(null)}>
+          <div className="bg-green-600 text-white rounded-3xl p-8 text-center max-w-sm w-full animate-bounce shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="text-7xl mb-4">🔔</div>
+            <h3 className="text-3xl font-black mb-2">Pedido Pronto!</h3>
+            <p className="text-xl opacity-90 mb-8">Seu pedido <b>#{readyAlert.sequenceNumber}</b> está pronto. Você já pode retirá-lo!</p>
+            <button onClick={() => setReadyAlert(null)} className="w-full bg-white text-green-700 font-bold py-4 rounded-2xl text-lg shadow-xl">
+              Entendido
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toast && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 bg-gray-800 text-white px-4 py-2 rounded-full shadow-xl border border-gray-700 animate-fade-in text-sm whitespace-nowrap">
+          {toast}
         </div>
       )}
     </main>
+  );
+}
+
+function NavBtn({ active, onClick, icon, label, color, badge }: any) {
+  return (
+    <button onClick={onClick} className="relative flex flex-col items-center gap-1 min-w-[64px] group">
+      <div className={`text-2xl transition-transform group-active:scale-90 ${active ? '' : 'grayscale'}`}>{icon}</div>
+      <span className={`text-[10px] font-bold uppercase tracking-wider ${active ? '' : 'text-gray-500'}`} style={active ? { color } : undefined}>
+        {label}
+      </span>
+      {badge !== undefined && (
+        <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center ring-2 ring-[#0b0b0f]">
+          {badge}
+        </span>
+      )}
+      {active && (
+        <div className="absolute -bottom-3 w-8 h-1 rounded-t-full" style={{ backgroundColor: color }} />
+      )}
+    </button>
   );
 }
