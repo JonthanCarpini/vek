@@ -79,7 +79,14 @@ export default function DisplayPage() {
           <h2 className="text-2xl font-bold mb-4" style={{ color: primary }}>🔥 Destaques</h2>
           {featured ? (
             <div className="card flex-1 flex flex-col overflow-hidden">
-              {featured.imageUrl ? (
+              {featured.videoUrl ? (
+                <video
+                  key={featured.id}
+                  src={featured.videoUrl}
+                  autoPlay muted loop playsInline
+                  className="w-full h-96 object-cover bg-black"
+                />
+              ) : featured.imageUrl ? (
                 <img src={featured.imageUrl} alt={featured.name} className="w-full h-96 object-cover" />
               ) : (
                 <div className="w-full h-96 bg-gray-800 flex items-center justify-center text-6xl">🍔</div>

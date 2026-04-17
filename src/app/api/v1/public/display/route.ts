@@ -24,11 +24,11 @@ export async function GET(_req: NextRequest) {
         },
       }),
       prisma.product.findMany({
-        where: { unitId: unit.id, active: true, available: true },
+        where: { unitId: unit.id, active: true, available: true, featured: true },
         orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
-        take: 8,
+        take: 12,
         select: {
-          id: true, name: true, description: true, price: true, imageUrl: true,
+          id: true, name: true, description: true, price: true, imageUrl: true, videoUrl: true, featured: true,
           category: { select: { name: true } },
         },
       }),
