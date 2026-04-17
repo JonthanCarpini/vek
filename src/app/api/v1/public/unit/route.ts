@@ -9,6 +9,7 @@ export async function GET(_req: NextRequest) {
       select: {
         id: true, name: true, address: true, phone: true,
         whatsapp: true, logoUrl: true, primaryColor: true,
+        serviceFee: true, paymentMethods: true, onlinePaymentEnabled: true,
       },
     });
     return ok({ unit });

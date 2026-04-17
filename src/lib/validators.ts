@@ -19,6 +19,9 @@ export const createOrderSchema = z.object({
 
 export const createCallSchema = z.object({
   type: z.enum(['waiter', 'bill', 'help']),
+  reason: z.string().max(300).optional().nullable(),
+  paymentHint: z.enum(['cash', 'credit', 'debit', 'pix', 'split', 'online']).optional().nullable(),
+  splitCount: z.number().int().min(2).max(20).optional().nullable(),
 });
 
 export const loginSchema = z.object({

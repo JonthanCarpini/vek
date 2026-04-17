@@ -318,6 +318,9 @@ model Call {
   tableId         String
   unitId          String
   type            String    // waiter | bill | help
+  reason          String?   @db.Text // motivo livre (ex.: "mais guardanapos", "trocar copo")
+  paymentHint     String?   // quando type=bill: cash|credit|debit|pix|split|online (apenas hint)
+  splitCount      Int?      // quando paymentHint=split: qtd de partes sugerida
   status          String    @default("pending") // pending | attended | cancelled
   attendedAt      DateTime?
   attendedByUserId String?

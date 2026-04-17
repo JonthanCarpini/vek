@@ -1,0 +1,504 @@
+'use client';
+import { useEffect, useMemo, useState } from 'react';
+import { useParams } from 'next/navigation';
+import { getSocket, joinRooms } from '@/lib/socket-client';
+import { formatBRL } from '@/lib/format';
+import { MenuTab } from './_components/MenuTab';
+import { ProductModal } from './_components/ProductModal';
+import { CartDrawer } from './_components/CartDrawer';
+import { OrdersTab } from './_components/OrdersTab';
+import { BillTab } from './_components/BillTab';
+import { CallWaiterModal } from './_components/CallWaiterModal';
+import { BillRequestModal } from './_components/BillRequestModal';
+import type { CartItem, Category, Order, Product, Call, Session, Unit } from './_components/types';
+import { STATUS_LABEL } from './_components/types';
+
+type Step = 'intro' | 'checkin' | 'app' | 'browse';
+type Tab = 'menu' | 'orders' | 'bill';
+
+export default function ClientPage() {
+  const params = useParams<{ token: string }>();
+  const qrToken = params.token;
+
+  const [step, setStep] = useState<Step>('intro');
+  const [tab, setTab] = useState<Tab>('menu');
+  const [token, setToken] = useState('');
+  const [session, setSession] = useState<Session | null>(null);
+  const [unit, setUnit] = useState<Unit | null>(null);
+
+  // Checkin
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  // Menu
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+
+  // Cart
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [cartOpen, setCartOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Orders & calls
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [calls, setCalls] = useState<Call[]>([]);
+
+  // Modals
+  const [callWaiterOpen, setCallWaiterOpen] = useState(false);
+  const [billRequestOpen, setBillRequestOpen] = useState(false);
+
+  // Feedback
+  const [toast, setToast] = useState<string | null>(null);
+  const [readyAlert, setReadyAlert] = useState<any>(null);
+
+  // ===== Bootstrap =====
+  useEffect(() => {
+    loadPublicUnit();
+    const saved = localStorage.getItem(`md:session:${qrToken}`);
+    if (saved) {
+      try {
+        const d = JSON.parse(saved);
+        setToken(d.token);
+        setSession(d.session);
+        setStep('app');
+      } catch {}
+    }
+  }, [qrToken]);
+
+  async function loadPublicUnit() {
+    try {
+      const r = await fetch('/api/v1/public/unit', { cache: 'no-store' });
+      const j = await r.json();
+      if (r.ok && j?.data?.unit) setUnit(j.data.unit);
+    } catch {}
+  }
+
+  // ===== App mode: carrega dados + socket =====
+  useEffect(() => {
+    if (step === 'app' && token && session) {
+      loadMenu();
+      loadOrders();
+      loadCalls();
+      joinRooms([`session:${session.id}`]);
+      const s = getSocket();
+      const onOrderStatus = (p: any) => {
+        loadOrders();
+        showToast(`Pedido #${p.sequenceNumber ?? ''}: ${STATUS_LABEL[p.status] || p.status}`);
+      };
+      const onOrderReady = (p: any) => {
+        loadOrders();
+        setReadyAlert(p);
+        playReadySound();
+      };
+      const onCallAttended = () => { loadCalls(); showToast('Chamada atendida!'); };
+      s.on('order.status_changed', onOrderStatus);
+      s.on('order.updated', () => loadOrders());
+      s.on('order.ready', onOrderReady);
+      s.on('call.attended', onCallAttended);
+      const interval = setInterval(() => { loadCalls(); }, 30000);
+      return () => {
+        s.off('order.status_changed', onOrderStatus);
+        s.off('order.updated');
+        s.off('order.ready', onOrderReady);
+        s.off('call.attended', onCallAttended);
+        clearInterval(interval);
+      };
+    }
+    if (step === 'browse') loadMenuPublic();
+  }, [step, token, session?.id]);
+
+  function playReadySound() {
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine'; osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(); osc.stop(ctx.currentTime + 0.6);
+    } catch {}
+    if ('vibrate' in navigator) { try { navigator.vibrate([200, 80, 200]); } catch {} }
+  }
+
+  function showToast(m: string) { setToast(m); setTimeout(() => setToast(null), 3000); }
+
+  // ===== Checkin =====
+  async function checkin(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true); setErr(null);
+    try {
+      const r = await fetch('/api/v1/public/checkin', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ qrToken, name, phone }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j?.error?.message || 'Erro no check-in');
+      setToken(j.data.token); setSession(j.data.session);
+      localStorage.setItem(`md:session:${qrToken}`, JSON.stringify(j.data));
+      setStep('app');
+    } catch (e: any) { setErr(e.message); }
+    finally { setLoading(false); }
+  }
+
+  // ===== Loaders =====
+  async function loadMenu() {
+    const r = await fetch('/api/v1/public/menu', { headers: { 'x-session-token': token } });
+    const j = await r.json();
+    if (r.ok) setCategories(j.data.categories);
+  }
+  async function loadMenuPublic() {
+    const r = await fetch(`/api/v1/public/menu?qrToken=${encodeURIComponent(qrToken)}`);
+    const j = await r.json();
+    if (r.ok) setCategories(j.data.categories);
+    else setErr(j?.error?.message || 'Erro ao carregar cardápio');
+  }
+  async function loadOrders() {
+    const r = await fetch('/api/v1/public/orders', { headers: { 'x-session-token': token } });
+    const j = await r.json();
+    if (r.ok) setOrders(j.data.orders);
+  }
+  async function loadCalls() {
+    const r = await fetch('/api/v1/public/calls', { headers: { 'x-session-token': token } });
+    const j = await r.json();
+    if (r.ok) setCalls(j.data.calls);
+  }
+
+  // ===== Cart =====
+  function addToCart(p: Product, quantity: number, notes: string) {
+    setCart((c) => {
+      const existing = c.find((x) => x.productId === p.id && (x.notes || '') === notes);
+      if (existing) {
+        return c.map((x) => x === existing ? { ...x, quantity: x.quantity + quantity } : x);
+      }
+      return [...c, {
+        productId: p.id, name: p.name, price: p.price,
+        quantity, notes: notes || undefined, imageUrl: p.imageUrl,
+      }];
+    });
+    showToast(`${quantity}× ${p.name} adicionado ao carrinho`);
+  }
+  function changeQty(pid: string, delta: number) {
+    setCart((c) => c
+      .map((x) => x.productId === pid ? { ...x, quantity: Math.max(0, x.quantity + delta) } : x)
+      .filter((x) => x.quantity > 0));
+  }
+  function removeFromCart(pid: string) {
+    setCart((c) => c.filter((x) => x.productId !== pid));
+  }
+  function editItemNotes(pid: string, notes: string) {
+    setCart((c) => c.map((x) => x.productId === pid ? { ...x, notes: notes || undefined } : x));
+  }
+
+  async function submitOrder() {
+    if (!cart.length) return;
+    setSubmitting(true);
+    try {
+      const r = await fetch('/api/v1/public/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-session-token': token },
+        body: JSON.stringify({
+          items: cart.map((x) => ({ productId: x.productId, quantity: x.quantity, notes: x.notes })),
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j?.error?.message || 'Erro ao enviar pedido');
+      setCart([]); setCartOpen(false);
+      showToast('Pedido enviado! Acompanhe em "Pedidos".');
+      setTab('orders');
+      loadOrders();
+    } catch (e: any) { showToast(e.message); }
+    finally { setSubmitting(false); }
+  }
+
+  // ===== Calls =====
+  async function callWaiter(reason: string) {
+    try {
+      await fetch('/api/v1/public/calls', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'x-session-token': token },
+        body: JSON.stringify({ type: 'waiter', reason: reason || null }),
+      });
+      showToast('Garçom chamado!');
+      loadCalls();
+    } catch (e: any) { showToast(e.message); }
+  }
+  async function requestBill(paymentHint: string, splitCount?: number) {
+    try {
+      await fetch('/api/v1/public/calls', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'x-session-token': token },
+        body: JSON.stringify({ type: 'bill', paymentHint, splitCount: splitCount || null }),
+      });
+      showToast('Garçom foi avisado. Aguarde na mesa.');
+      loadCalls();
+    } catch (e: any) { showToast(e.message); }
+  }
+  async function cancelCall(id: string) {
+    if (!confirm('Cancelar esta chamada?')) return;
+    await fetch(`/api/v1/public/calls?id=${id}`, {
+      method: 'DELETE', headers: { 'x-session-token': token },
+    });
+    loadCalls();
+  }
+
+  // ===== Totais =====
+  const serviceFeePct = unit?.serviceFee ? Number(unit.serviceFee) : 0;
+  const validOrders = orders.filter((o) => o.status !== 'cancelled');
+  const subtotal = useMemo(() => validOrders.reduce(
+    (s, o) => s + o.items.reduce((is, i) => is + Number(i.unitPrice) * i.quantity, 0), 0,
+  ), [validOrders]);
+  const serviceFee = subtotal * serviceFeePct;
+  const total = subtotal + serviceFee;
+
+  const cartTotal = cart.reduce((s, x) => s + x.price * x.quantity, 0);
+  const cartCount = cart.reduce((s, x) => s + x.quantity, 0);
+  const activeOrderCount = orders.filter((o) => ['received', 'accepted', 'preparing', 'ready'].includes(o.status)).length;
+
+  const primary = unit?.primaryColor || '#ea580c';
+
+  // ===== Renderização por step =====
+  if (step === 'intro') return <IntroScreen onStart={() => setStep('checkin')} onBrowse={() => setStep('browse')} unit={unit} primary={primary} />;
+  if (step === 'checkin') return (
+    <CheckinScreen
+      name={name} phone={phone} loading={loading} err={err} unit={unit} primary={primary}
+      onBack={() => setStep('intro')}
+      onChangeName={setName} onChangePhone={setPhone} onSubmit={checkin}
+    />
+  );
+  if (step === 'browse') return (
+    <BrowseScreen
+      categories={categories} err={err} primary={primary}
+      onStart={() => setStep('intro')}
+    />
+  );
+
+  // App principal
+  return (
+    <main className="min-h-screen pb-20 bg-[color:var(--bg)]">
+      {/* Header */}
+      <header className="sticky top-0 z-30 bg-[color:var(--bg)]/95 backdrop-blur border-b border-[color:var(--border)] px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-3 min-w-0">
+          {unit?.logoUrl && <img src={unit.logoUrl} alt="" className="w-9 h-9 rounded-full object-cover flex-shrink-0" />}
+          <div className="min-w-0">
+            <div className="font-bold truncate">{unit?.name || 'Restaurante'}</div>
+            <div className="text-xs text-gray-400">
+              Mesa {session?.tableNumber} • {session?.customerName}
+            </div>
+          </div>
+        </div>
+        {total > 0 && (
+          <button onClick={() => setTab('bill')}
+            className="text-right flex-shrink-0">
+            <div className="text-xs text-gray-400">Conta parcial</div>
+            <div className="font-bold" style={{ color: primary }}>{formatBRL(total)}</div>
+          </button>
+        )}
+      </header>
+
+      {/* Conteúdo da aba */}
+      {tab === 'menu' && (
+        <MenuTab categories={categories} onSelectProduct={setSelectedProduct} primaryColor={primary} />
+      )}
+      {tab === 'orders' && (
+        <OrdersTab orders={orders} primaryColor={primary} onGoToMenu={() => setTab('menu')} />
+      )}
+      {tab === 'bill' && (
+        <BillTab
+          session={session} orders={orders}
+          subtotal={subtotal} serviceFee={serviceFee} total={total} serviceFeePct={serviceFeePct}
+          calls={calls} primaryColor={primary}
+          onCallWaiter={() => setCallWaiterOpen(true)}
+          onRequestBill={() => setBillRequestOpen(true)}
+          onCancelCall={cancelCall}
+        />
+      )}
+
+      {/* FAB Carrinho — flutuante acima do bottom nav quando na aba Cardápio */}
+      {tab === 'menu' && cart.length > 0 && !cartOpen && (
+        <button onClick={() => setCartOpen(true)}
+          className="fixed bottom-20 left-1/2 -translate-x-1/2 z-20 rounded-full shadow-2xl px-5 py-3 font-semibold text-white flex items-center gap-3"
+          style={{ backgroundColor: primary }}>
+          <span className="bg-white/25 rounded-full w-7 h-7 flex items-center justify-center text-sm font-bold">{cartCount}</span>
+          Ver carrinho • {formatBRL(cartTotal)}
+        </button>
+      )}
+
+      {/* Bottom Nav */}
+      <nav className="fixed bottom-0 left-0 right-0 z-30 bg-[color:var(--bg)] border-t border-[color:var(--border)] grid grid-cols-3">
+        <TabButton active={tab === 'menu'} label="Cardápio" icon="🍽️" onClick={() => setTab('menu')} color={primary} />
+        <TabButton active={tab === 'orders'} label="Pedidos" icon="📋" onClick={() => setTab('orders')} color={primary}
+          badge={activeOrderCount > 0 ? activeOrderCount : undefined} />
+        <TabButton active={tab === 'bill'} label="Conta" icon="💳" onClick={() => setTab('bill')} color={primary}
+          badge={calls.filter((c) => c.status === 'pending').length || undefined} badgeColor="#f59e0b" />
+      </nav>
+
+      {/* Modais e drawers */}
+      <ProductModal
+        product={selectedProduct}
+        onClose={() => setSelectedProduct(null)}
+        onAdd={addToCart}
+        primaryColor={primary}
+      />
+      <CartDrawer
+        cart={cart} open={cartOpen}
+        onClose={() => setCartOpen(false)}
+        onChangeQty={changeQty} onRemove={removeFromCart} onEditNotes={editItemNotes}
+        onClear={() => setCart([])} onSubmit={submitOrder} submitting={submitting}
+        primaryColor={primary}
+      />
+      <CallWaiterModal
+        open={callWaiterOpen} onClose={() => setCallWaiterOpen(false)}
+        onConfirm={callWaiter} primaryColor={primary}
+      />
+      <BillRequestModal
+        open={billRequestOpen} onClose={() => setBillRequestOpen(false)}
+        onConfirm={requestBill} total={total}
+        enabledMethods={(unit?.paymentMethods || 'cash,credit,debit,pix').split(',').map((s) => s.trim())}
+        primaryColor={primary}
+      />
+
+      {/* Toast */}
+      {toast && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-40 bg-[color:var(--card)] border border-[color:var(--border)] rounded-full px-5 py-2 text-sm shadow-xl">
+          {toast}
+        </div>
+      )}
+
+      {/* Alerta de pedido pronto */}
+      {readyAlert && (
+        <div className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-5" onClick={() => setReadyAlert(null)}>
+          <div className="bg-green-600 text-white rounded-3xl p-8 text-center max-w-md w-full animate-bounce" onClick={(e) => e.stopPropagation()}>
+            <div className="text-6xl mb-3">🔔</div>
+            <div className="text-3xl font-black mb-2">Pedido pronto!</div>
+            <div className="text-xl">Seu pedido <b>#{readyAlert.sequenceNumber}</b> está pronto.</div>
+            <button onClick={() => setReadyAlert(null)} className="mt-6 bg-white text-green-700 font-bold px-6 py-3 rounded-xl">
+              OK, vou retirar
+            </button>
+          </div>
+        </div>
+      )}
+    </main>
+  );
+}
+
+function TabButton({
+  active, label, icon, onClick, color, badge, badgeColor,
+}: { active: boolean; label: string; icon: string; onClick: () => void; color: string; badge?: number; badgeColor?: string }) {
+  return (
+    <button onClick={onClick} className="py-2.5 flex flex-col items-center gap-0.5 relative transition">
+      <div className="relative">
+        <span className="text-2xl">{icon}</span>
+        {badge !== undefined && (
+          <span className="absolute -top-1 -right-2 text-[10px] font-bold text-white rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center"
+            style={{ backgroundColor: badgeColor || color }}>
+            {badge}
+          </span>
+        )}
+      </div>
+      <span className="text-[11px] font-medium" style={{ color: active ? color : '#9ca3af' }}>{label}</span>
+      {active && <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-b-full" style={{ backgroundColor: color }} />}
+    </button>
+  );
+}
+
+function IntroScreen({ onStart, onBrowse, unit, primary }: { onStart: () => void; onBrowse: () => void; unit: Unit | null; primary: string }) {
+  return (
+    <main className="min-h-screen flex items-center justify-center p-5">
+      <div className="w-full max-w-md space-y-5">
+        <div className="text-center">
+          {unit?.logoUrl ? (
+            <img src={unit.logoUrl} alt="logo" className="w-20 h-20 rounded-full object-cover mx-auto mb-3" />
+          ) : <div className="text-5xl mb-2">🍔</div>}
+          <div className="text-3xl font-bold">Bem-vindo{unit?.name ? ` ao ${unit.name}` : ''}!</div>
+          <p className="text-gray-400 mt-2 text-sm">O que você quer fazer agora?</p>
+        </div>
+        <button onClick={onStart} className="card p-5 w-full text-left transition hover:border-[color:var(--border-hover)]"
+          style={{ borderColor: primary }}>
+          <div className="text-xl font-bold" style={{ color: primary }}>🍽️ Iniciar minha mesa</div>
+          <p className="text-sm text-gray-400 mt-1">Faça pedidos, acompanhe em tempo real e peça a conta pelo app.</p>
+        </button>
+        <button onClick={onBrowse} className="card p-5 w-full text-left hover:border-gray-500 transition">
+          <div className="text-xl font-bold">📖 Apenas ver o cardápio</div>
+          <p className="text-sm text-gray-400 mt-1">Explore os produtos sem fazer pedido ainda.</p>
+        </button>
+      </div>
+    </main>
+  );
+}
+
+function CheckinScreen({
+  name, phone, loading, err, unit, primary, onBack, onChangeName, onChangePhone, onSubmit,
+}: {
+  name: string; phone: string; loading: boolean; err: string | null; unit: Unit | null; primary: string;
+  onBack: () => void; onChangeName: (v: string) => void; onChangePhone: (v: string) => void; onSubmit: (e: React.FormEvent) => void;
+}) {
+  return (
+    <main className="min-h-screen flex items-center justify-center p-5">
+      <form onSubmit={onSubmit} className="card p-6 w-full max-w-md">
+        <button type="button" onClick={onBack} className="text-sm text-gray-400 mb-3">← Voltar</button>
+        {unit?.logoUrl && <img src={unit.logoUrl} alt="" className="w-14 h-14 rounded-full object-cover mb-3" />}
+        <div className="text-2xl font-bold mb-1">Iniciar mesa 👋</div>
+        <p className="text-gray-400 mb-6 text-sm">Informe seus dados para começar</p>
+        <label className="label">Nome do responsável</label>
+        <input className="input mb-4" value={name} onChange={(e) => onChangeName(e.target.value)} required minLength={2} autoFocus />
+        <label className="label">Telefone</label>
+        <input className="input mb-5" value={phone} onChange={(e) => onChangePhone(e.target.value)} required inputMode="tel" placeholder="(11) 99999-9999" />
+        {err && <div className="text-red-400 text-sm mb-3">{err}</div>}
+        <button className="btn btn-primary w-full py-3" disabled={loading} style={{ backgroundColor: primary }}>
+          {loading ? 'Entrando...' : 'Começar pedido'}
+        </button>
+        <p className="text-xs text-gray-500 mt-3 text-center">
+          Seus dados ficam associados apenas a este pedido.
+        </p>
+      </form>
+    </main>
+  );
+}
+
+function BrowseScreen({
+  categories, err, primary, onStart,
+}: { categories: Category[]; err: string | null; primary: string; onStart: () => void }) {
+  const [activeCat, setActiveCat] = useState<string | null>(categories[0]?.id || null);
+  useEffect(() => { if (!activeCat && categories[0]) setActiveCat(categories[0].id); }, [categories]);
+  const cat = categories.find((c) => c.id === activeCat);
+  return (
+    <main className="min-h-screen pb-16">
+      <header className="sticky top-0 z-20 bg-[color:var(--bg)]/90 backdrop-blur border-b border-[color:var(--border)] px-4 py-3 flex items-center justify-between">
+        <div>
+          <div className="text-xs text-gray-400">Apenas visualização</div>
+          <div className="text-lg font-bold">Cardápio</div>
+        </div>
+        <button onClick={onStart} className="btn btn-primary text-sm" style={{ backgroundColor: primary }}>Iniciar mesa</button>
+      </header>
+      {err && <div className="p-4 text-red-400 text-sm">{err}</div>}
+      <div className="sticky top-[60px] z-10 bg-[color:var(--bg)]/90 backdrop-blur border-b border-[color:var(--border)] overflow-x-auto scroll-none px-3 py-2">
+        <div className="flex gap-2">
+          {categories.map((c) => {
+            const active = activeCat === c.id;
+            return (
+              <button key={c.id} onClick={() => setActiveCat(c.id)}
+                className={`px-3 py-1.5 rounded-full whitespace-nowrap text-sm ${active ? 'text-white' : 'bg-[#1f1f2b] text-gray-300'}`}
+                style={active ? { backgroundColor: primary } : undefined}>
+                {c.name}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <div className="p-4 space-y-3">
+        {cat?.products.map((p) => (
+          <div key={p.id} className="card p-3 flex gap-3">
+            {p.imageUrl ? <img src={p.imageUrl} alt="" className="w-20 h-20 rounded-lg object-cover" /> : <div className="w-20 h-20 rounded-lg bg-[#1f1f2b]" />}
+            <div className="flex-1 min-w-0">
+              <div className="font-semibold truncate">{p.name}</div>
+              {p.description && <div className="text-xs text-gray-400 line-clamp-2">{p.description}</div>}
+              <div className="mt-1 font-bold" style={{ color: primary }}>{formatBRL(p.price)}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </main>
+  );
+}
