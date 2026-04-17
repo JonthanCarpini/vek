@@ -355,9 +355,13 @@ export default function ClientPage() {
       </div>
       <div className={tab === 'bill' ? 'block' : 'hidden'}>
         <BillTab
+          session={session}
           orders={orders}
+          subtotal={subtotal}
+          serviceFee={subtotal * (unit.serviceFee || 0) / 100}
+          total={subtotal * (1 + (unit.serviceFee || 0) / 100)}
+          serviceFeePct={(unit.serviceFee || 0) / 100}
           calls={calls}
-          unit={unit}
           onCallWaiter={() => setShowCallWaiter(true)}
           onRequestBill={() => setShowBillRequest(true)}
           onCancelCall={handleCancelCall}
@@ -408,13 +412,20 @@ export default function ClientPage() {
       <CartDrawer
         open={cartOpen}
         onClose={() => setCartOpen(false)}
-        items={cart}
-        onUpdateQty={(pid, notes, delta) => {
-          setCart((prev) => prev.map((x) => x.productId === pid && x.notes === notes ? { ...x, quantity: Math.max(0, x.quantity + delta) } : x).filter((x) => x.quantity > 0));
+        cart={cart}
+        onChangeQty={(pid, delta) => {
+          setCart((prev) => prev.map((x) => x.productId === pid ? { ...x, quantity: Math.max(0, x.quantity + delta) } : x).filter((x) => x.quantity > 0));
         }}
-        onConfirm={handleSubmitOrder}
+        onRemove={(pid) => {
+          setCart((prev) => prev.filter((x) => x.productId !== pid));
+        }}
+        onEditNotes={(pid, notes) => {
+          setCart((prev) => prev.map((x) => x.productId === pid ? { ...x, notes } : x));
+        }}
+        onClear={() => setCart([])}
+        onSubmit={handleSubmitOrder}
+        submitting={loading}
         primaryColor={primaryColor}
-        loading={loading}
       />
       <CallWaiterModal
         open={showCallWaiter}
