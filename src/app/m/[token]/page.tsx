@@ -58,6 +58,7 @@ export default function ClientPage() {
     const savedSession = localStorage.getItem(`md:session:${qrToken}`);
     
     if (!savedSession && savedName && savedPhone && isPWA) {
+      setLoading(true); // Bloqueia UI enquanto tenta auto-checkin
       autoCheckin(savedName, savedPhone);
     }
 
@@ -90,7 +91,10 @@ export default function ClientPage() {
         localStorage.setItem(`md:session:${qrToken}`, JSON.stringify(j.data));
         setStep('menu');
       }
-    } catch {}
+    } catch {
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -278,6 +282,11 @@ export default function ClientPage() {
       if (!r.ok) throw new Error(j?.error?.message || 'Erro no check-in');
       setToken(j.data.token);
       setSession(j.data.session);
+      
+      // Salva dados do cliente para persistência futura
+      localStorage.setItem('md:customer:name', name);
+      localStorage.setItem('md:customer:phone', phone);
+      
       localStorage.setItem(`md:session:${qrToken}`, JSON.stringify(j.data));
       setStep('menu');
     } catch (e: any) { setErr(e.message); }
