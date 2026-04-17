@@ -161,8 +161,9 @@ export function WaiterTableModal({ sessionId, onClose }: { sessionId: string; on
               </div>
               <div className="text-xl font-bold">{session.customerName || 'Cliente'}</div>
               <div className="text-xs text-gray-400">
-                {orders.length} pedido(s) · Total {formatBRL(session.subtotal)}
-                {session.remaining > 0 && <span className="text-amber-400"> · Restante {formatBRL(session.remaining)}</span>}
+                {orders.length} pedido(s) · Total {formatBRL(session.total)}
+                {session.serviceFee > 0 && <span className="opacity-70"> (incl. {formatBRL(session.serviceFee)} taxa)</span>}
+                {session.remaining > 0 && <span className="text-amber-400 font-semibold"> · Restante {formatBRL(session.remaining)}</span>}
               </div>
             </div>
             <button onClick={onClose} className="text-gray-400 text-2xl leading-none px-3">×</button>

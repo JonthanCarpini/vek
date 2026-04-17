@@ -368,7 +368,11 @@ export default function ClientPage() {
   }
 
   // -- Main View (step === 'menu') --
-  const subtotal = orders.filter((o) => o.status !== 'cancelled').reduce((s, o) => s + Number(o.total), 0);
+  const activeOrders = orders.filter((o) => o.status !== 'cancelled');
+  const sessionSubtotal = activeOrders.reduce((s, o) => s + Number(o.subtotal), 0);
+  const sessionServiceFee = activeOrders.reduce((s, o) => s + Number(o.serviceFee), 0);
+  const sessionTotal = activeOrders.reduce((s, o) => s + Number(o.total), 0);
+
   const activeOrdersCount = orders.filter((o) => !['delivered', 'cancelled'].includes(o.status)).length;
   const pendingCallsCount = calls.filter((c) => c.status === 'pending').length;
 
@@ -389,7 +393,7 @@ export default function ClientPage() {
         </div>
         <button onClick={() => setTab('bill')} className="bg-[#1f1f2b] px-3 py-1.5 rounded-xl text-right">
           <div className="text-[10px] text-gray-500 leading-none">CONTA PARCIAL</div>
-          <div className="font-black text-sm" style={{ color: primaryColor }}>{formatBRL(subtotal)}</div>
+          <div className="font-black text-sm" style={{ color: primaryColor }}>{formatBRL(sessionTotal)}</div>
         </button>
       </header>
 
@@ -404,10 +408,10 @@ export default function ClientPage() {
         <BillTab
           session={session}
           orders={orders}
-          subtotal={subtotal}
-          serviceFee={subtotal * (unit.serviceFee || 0) / 100}
-          total={subtotal * (1 + (unit.serviceFee || 0) / 100)}
-          serviceFeePct={(unit.serviceFee || 0) / 100}
+          subtotal={sessionSubtotal}
+          serviceFee={sessionServiceFee}
+          total={sessionTotal}
+          serviceFeePct={sessionSubtotal > 0 ? (sessionServiceFee / sessionSubtotal) : 0}
           calls={calls}
           onCallWaiter={() => setShowCallWaiter(true)}
           onRequestBill={() => setShowBillRequest(true)}
@@ -484,7 +488,7 @@ export default function ClientPage() {
         open={showBillRequest}
         onClose={() => setShowBillRequest(false)}
         onConfirm={handleBillRequest}
-        total={subtotal * (1 + (unit.serviceFee || 0) / 100)}
+        total={sessionTotal}
         enabledMethods={(unit.paymentMethods || '').split(',').filter(Boolean)}
         primaryColor={primaryColor}
       />

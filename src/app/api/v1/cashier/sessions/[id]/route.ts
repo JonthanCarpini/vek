@@ -24,17 +24,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     });
     if (!session) return notFound();
 
-    const subtotal = session.orders.reduce(
-      (sum: number, o: any) => sum + o.items.reduce((a: number, i: any) => a + Number(i.unitPrice) * i.quantity, 0),
-      0,
-    );
+    const subtotal = session.orders.reduce((sum: number, o: any) => sum + Number(o.subtotal), 0);
+    const serviceFee = session.orders.reduce((sum: number, o: any) => sum + Number(o.serviceFee), 0);
+    const total = Number((subtotal + serviceFee).toFixed(2));
     const paid = session.payments.reduce((s: number, p: any) => s + Number(p.amount) - Number(p.changeGiven), 0);
-    const remaining = Math.max(0, Number((subtotal - paid).toFixed(2)));
+    const remaining = Math.max(0, Number((total - paid).toFixed(2)));
 
     return ok({
       session: {
         ...session,
         subtotal,
+        serviceFee,
+        total,
         paid,
         remaining,
       },

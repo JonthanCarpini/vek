@@ -148,8 +148,23 @@ export function CashierSessionModal({ sessionId, onClose }: { sessionId: string;
 
             <div className="card p-4 space-y-1">
               <div className="flex justify-between"><span>Subtotal</span><b>{formatBRL(data.subtotal)}</b></div>
+              {data.serviceFee > 0 && (
+                <div className="flex justify-between text-gray-400 text-sm">
+                  <span>Taxa de serviço</span>
+                  <span>{formatBRL(data.serviceFee)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-green-400"><span>Pago</span><b>{formatBRL(data.paid)}</b></div>
-              <div className="flex justify-between text-lg"><span>Restante</span><b className={remaining > 0 ? 'text-amber-400' : 'text-green-400'}>{formatBRL(remaining)}</b></div>
+              <div className="flex justify-between text-lg border-t border-gray-800 pt-1 mt-1">
+                <span>Total</span>
+                <b className={remaining > 0 ? 'text-amber-400' : 'text-green-400'}>{formatBRL(data.total)}</b>
+              </div>
+              {remaining > 0 && (
+                <div className="flex justify-between text-sm italic opacity-80">
+                  <span>Restante</span>
+                  <span>{formatBRL(remaining)}</span>
+                </div>
+              )}
             </div>
           </div>
 
