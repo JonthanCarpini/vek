@@ -27,19 +27,33 @@ export default function AdminCalls() {
   return (
     <div>
       <h1 className="text-2xl font-bold mb-4">Chamadas pendentes</h1>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {calls.map((c: any) => (
-          <div key={c.id} className="card p-4">
-            <div className="flex justify-between mb-2">
-              <div className="text-lg font-bold">Mesa {c.table?.number}</div>
-              <span className="text-xs text-gray-400">{new Date(c.createdAt).toLocaleTimeString('pt-BR')}</span>
+          <div key={c.id} className="card p-5 flex flex-col justify-between border-brand-500/10 hover:border-brand-500/30 transition-colors group">
+            <div>
+              <div className="flex justify-between items-start mb-3">
+                <div className="bg-brand-600/10 p-2 rounded-xl text-brand-500 group-hover:scale-110 transition-transform">
+                  <div className="text-sm font-black">MESA</div>
+                  <div className="text-2xl font-black">{c.table?.number}</div>
+                </div>
+                <span className="text-[10px] text-gray-500 bg-white/5 px-2 py-1 rounded-full font-medium">{new Date(c.createdAt).toLocaleTimeString('pt-BR')}</span>
+              </div>
+              <div className="text-sm font-semibold text-gray-200 mb-1 truncate">{c.session?.customerName || 'Cliente'}</div>
+              <div className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                <span className="opacity-80">{TYPE[c.type].split(' ')[0]}</span>
+                <span>{TYPE[c.type].split(' ').slice(1).join(' ')}</span>
+              </div>
             </div>
-            <div className="text-sm text-gray-300 mb-1">{c.session?.customerName}</div>
-            <div className="text-xl mb-3">{TYPE[c.type]}</div>
-            <button onClick={() => attend(c.id)} className="btn btn-primary w-full">Atender</button>
+            <button onClick={() => attend(c.id)} className="btn btn-primary w-full py-3 rounded-xl shadow-lg shadow-brand-600/20 active:scale-95 transition-all font-bold tracking-tight">Atender Chamada</button>
           </div>
         ))}
-        {calls.length === 0 && <div className="col-span-full text-gray-500 text-center py-10">Nenhuma chamada pendente</div>}
+        {calls.length === 0 && (
+          <div className="col-span-full flex flex-col items-center justify-center py-20 card bg-white/5 border-dashed border-gray-800">
+            <div className="text-5xl mb-4 opacity-20">🙋</div>
+            <div className="text-gray-500 font-medium text-lg text-center">Nenhuma chamada pendente no momento</div>
+            <p className="text-gray-600 text-sm mt-1">O sistema atualizará automaticamente assim que houver novos chamados.</p>
+          </div>
+        )}
       </div>
     </div>
   );

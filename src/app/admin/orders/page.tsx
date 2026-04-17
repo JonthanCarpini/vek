@@ -64,43 +64,83 @@ export default function AdminOrders() {
           </button>
         ))}
       </div>
-      <div className="card overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-[#1f1f2b] text-left">
-            <tr>
-              <th className="p-3">#</th><th className="p-3">Mesa</th><th className="p-3">Cliente</th>
-              <th className="p-3">Itens</th><th className="p-3">Total</th>
-              <th className="p-3">Status</th><th className="p-3">Hora</th><th className="p-3">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {orders.map((o: any) => (
-              <tr key={o.id} className="border-t border-[color:var(--border)]">
-                <td className="p-3 font-bold">#{o.sequenceNumber}</td>
-                <td className="p-3">{o.table?.number}</td>
-                <td className="p-3">{o.session?.customerName}</td>
-                <td className="p-3">{o.items.length}</td>
-                <td className="p-3 font-semibold">{formatBRL(o.total)}</td>
-                <td className="p-3"><span className="badge">{STATUS_LABEL[o.status]}</span></td>
-                <td className="p-3 text-gray-400">{new Date(o.createdAt).toLocaleTimeString('pt-BR')}</td>
-                <td className="p-3">
-                  <div className="flex gap-1">
-                    {NEXT_STATUS[o.status] && (
-                      <button onClick={() => advance(o.id, NEXT_STATUS[o.status]!.to)} className="btn btn-primary text-xs px-2 py-1">
-                        {NEXT_STATUS[o.status]!.label}
-                      </button>
-                    )}
-                    {o.status !== 'cancelled' && o.status !== 'delivered' && (
-                      <button onClick={() => cancel(o.id)} className="btn btn-ghost text-xs px-2 py-1 text-red-400">Cancelar</button>
-                    )}
-                    <button onClick={() => setSelectedOrder(o)} className="btn btn-ghost text-xs px-2 py-1 text-brand-400 border border-brand-500/20">Ver Itens</button>
-                  </div>
-                </td>
+      <div className="card overflow-hidden">
+        {/* Desktop Table View */}
+        <div className="hidden md:block overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-[#1f1f2b] text-left">
+              <tr>
+                <th className="p-3">#</th><th className="p-3">Mesa</th><th className="p-3">Cliente</th>
+                <th className="p-3">Itens</th><th className="p-3">Total</th>
+                <th className="p-3">Status</th><th className="p-3">Hora</th><th className="p-3">Ações</th>
               </tr>
-            ))}
-            {orders.length === 0 && <tr><td colSpan={8} className="p-6 text-center text-gray-500">Nenhum pedido</td></tr>}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {orders.map((o: any) => (
+                <tr key={o.id} className="border-t border-[color:var(--border)]">
+                  <td className="p-3 font-bold">#{o.sequenceNumber}</td>
+                  <td className="p-3">{o.table?.number}</td>
+                  <td className="p-3">{o.session?.customerName}</td>
+                  <td className="p-3">{o.items.length}</td>
+                  <td className="p-3 font-semibold">{formatBRL(o.total)}</td>
+                  <td className="p-3"><span className="badge">{STATUS_LABEL[o.status]}</span></td>
+                  <td className="p-3 text-gray-400">{new Date(o.createdAt).toLocaleTimeString('pt-BR')}</td>
+                  <td className="p-3 text-right">
+                    <div className="flex gap-1 justify-end">
+                      {NEXT_STATUS[o.status] && (
+                        <button onClick={() => advance(o.id, NEXT_STATUS[o.status]!.to)} className="btn btn-primary text-xs px-2 py-1">
+                          {NEXT_STATUS[o.status]!.label}
+                        </button>
+                      )}
+                      {o.status !== 'cancelled' && o.status !== 'delivered' && (
+                        <button onClick={() => cancel(o.id)} className="btn btn-ghost text-xs px-2 py-1 text-red-400">Cancelar</button>
+                      )}
+                      <button onClick={() => setSelectedOrder(o)} className="btn btn-ghost text-xs px-2 py-1 text-brand-400 border border-brand-500/20">Ver Itens</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {orders.length === 0 && <tr><td colSpan={8} className="p-6 text-center text-gray-500">Nenhum pedido</td></tr>}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Mobile Card View */}
+        <div className="md:hidden divide-y divide-[color:var(--border)]">
+          {orders.map((o: any) => (
+            <div key={o.id} className="p-4 flex flex-col gap-3">
+              <div className="flex justify-between items-start">
+                <div>
+                  <div className="font-black text-lg">#{o.sequenceNumber}</div>
+                  <div className="text-xs text-gray-500 uppercase">Mesa {o.table?.number} • {o.session?.customerName}</div>
+                </div>
+                <span className="badge">{STATUS_LABEL[o.status]}</span>
+              </div>
+              
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-400">{o.items.length} itens</span>
+                <span className="font-black text-brand-500">{formatBRL(o.total)}</span>
+              </div>
+
+              <div className="text-[10px] text-gray-600">
+                {new Date(o.createdAt).toLocaleString('pt-BR')}
+              </div>
+
+              <div className="flex gap-2 flex-wrap">
+                {NEXT_STATUS[o.status] && (
+                  <button onClick={() => advance(o.id, NEXT_STATUS[o.status]!.to)} className="btn btn-primary text-xs flex-1 py-2">
+                    {NEXT_STATUS[o.status]!.label}
+                  </button>
+                )}
+                <button onClick={() => setSelectedOrder(o)} className="btn btn-ghost text-xs px-3 py-2 text-brand-400 border border-brand-500/20">Ver Itens</button>
+                {o.status !== 'cancelled' && o.status !== 'delivered' && (
+                  <button onClick={() => cancel(o.id)} className="btn btn-ghost text-xs px-3 py-2 text-red-400">Cancelar</button>
+                )}
+              </div>
+            </div>
+          ))}
+          {orders.length === 0 && <div className="p-10 text-center text-gray-500">Nenhum pedido</div>}
+        </div>
       </div>
 
       {/* Modal de Detalhes */}

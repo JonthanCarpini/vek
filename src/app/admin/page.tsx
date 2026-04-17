@@ -78,26 +78,30 @@ export default function AdminDashboard() {
         <div className="card p-4 mb-4 text-sm text-gray-400">Nenhum caixa aberto — abra no <a href="/cashier" className="text-brand-400 underline">/cashier</a>. Mostrando dados desde 00:00.</div>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
         {cards.map((c) => (
-          <div key={c.label} className="card p-5">
-            <div className="text-3xl mb-2">{c.icon}</div>
-            <div className="text-sm text-gray-400">{c.label}</div>
-            <div className="text-3xl font-bold mt-1">{c.value}</div>
+          <div key={c.label} className="card p-6 flex flex-col justify-between hover:border-brand-500/30 transition-colors group">
+            <div>
+              <div className="text-4xl mb-4 group-hover:scale-110 transition-transform w-fit">{c.icon}</div>
+              <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">{c.label}</div>
+            </div>
+            <div className="text-3xl font-black text-white mt-1 break-all">{c.value}</div>
           </div>
         ))}
       </div>
 
       {/* Pagamentos por método */}
       {m?.paymentByMethod?.length > 0 && (
-        <div className="card p-5 mb-5">
-          <div className="font-semibold mb-3">Pagamentos por método</div>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="card p-6 mb-6 border-brand-500/5">
+          <div className="font-bold text-lg mb-4 flex items-center gap-2">
+            <span>💳</span> Pagamentos por método
+          </div>
+          <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-4">
             {m.paymentByMethod.map((p: any) => (
-              <div key={p.method} className="border border-gray-800 rounded p-3">
-                <div className="text-xs text-gray-500">{METHOD_LABELS[p.method] || p.method}</div>
-                <div className="text-lg font-bold">{formatBRL(p.net)}</div>
-                {p.changeGiven > 0 && <div className="text-xs text-gray-500">Troco: {formatBRL(p.changeGiven)}</div>}
+              <div key={p.method} className="bg-white/5 border border-gray-800 rounded-2xl p-4 hover:bg-white/10 transition-colors">
+                <div className="text-[10px] font-black text-gray-500 uppercase tracking-tighter mb-1">{METHOD_LABELS[p.method] || p.method}</div>
+                <div className="text-xl font-black text-brand-500">{formatBRL(p.net)}</div>
+                {p.changeGiven > 0 && <div className="text-[10px] text-red-400 font-medium mt-1">Troco: {formatBRL(p.changeGiven)}</div>}
               </div>
             ))}
           </div>
