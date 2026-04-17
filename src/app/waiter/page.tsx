@@ -7,6 +7,7 @@ import { formatBRL } from '@/lib/format';
 import { WaiterTableModal } from '@/components/WaiterTableModal';
 import { PwaHead } from '@/components/PwaHead';
 import { playNotificationSound } from '@/lib/notifications';
+import { Download } from 'lucide-react';
 
 const TYPE_LABEL: Record<string, string> = { waiter: '🙋 Garçom', bill: '💳 Conta', help: '❓ Ajuda' };
 const STATUS_LABEL: Record<string, string> = {
@@ -29,10 +30,18 @@ export default function WaiterPage() {
   const [sessions, setSessions] = useState<any[]>([]);
   const [manageSession, setManageSession] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
 
   function showToast(m: string) { setToast(m); setTimeout(() => setToast(null), 4000); }
 
   useEffect(() => {
+    // PWA Install Prompt
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
     const s = loadStaff();
     if (!s) { router.push('/admin/login?next=/waiter'); return; }
     loadAll();
@@ -67,9 +76,17 @@ export default function WaiterPage() {
       sock.off('order.updated', onOrder);
       sock.off('order.status_changed', reload); 
       sock.off('session.closed', reload);
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
       clearInterval(i);
     };
   }, []);
+
+  async function handleInstall() {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    if (outcome === 'accepted') setInstallPrompt(null);
+  }
 
   async function loadAll() { await Promise.all([loadCalls(), loadSessions()]); }
   async function loadCalls() {
@@ -98,7 +115,17 @@ export default function WaiterPage() {
     <main className="min-h-screen p-4">
       <PwaHead manifest="/manifest-waiter.json" />
       <header className="flex justify-between items-center mb-4">
-        <div className="text-2xl font-bold">🙋 Painel do Garçom</div>
+        <div className="flex items-center gap-4">
+          <div className="text-2xl font-bold">🙋 Painel do Garçom</div>
+          {installPrompt && (
+            <button 
+              onClick={handleInstall}
+              className="btn btn-primary btn-sm flex items-center gap-2"
+            >
+              <Download size={16} /> Instalar App
+            </button>
+          )}
+        </div>
         <button onClick={() => { clearStaff(); router.push('/admin/login'); }} className="btn btn-ghost">Sair</button>
       </header>
 

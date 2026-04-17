@@ -8,6 +8,7 @@ import { CashierSessionModal } from '@/components/CashierSessionModal';
 import { CashierSummaryCard } from '@/components/CashierSummaryCard';
 import { PwaHead } from '@/components/PwaHead';
 import { playNotificationSound } from '@/lib/notifications';
+import { Download } from 'lucide-react';
 
 export default function CashierPage() {
   const router = useRouter();
@@ -20,11 +21,19 @@ export default function CashierPage() {
   const [modal, setModal] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
 
   function showToast(m: string) { setToast(m); setTimeout(() => setToast(null), 4000); }
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
+    // PWA Install Prompt
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
     const s = loadStaff();
     if (!s) { router.push('/admin/login?next=/cashier'); return; }
     setStaff(s);
@@ -52,9 +61,17 @@ export default function CashierPage() {
       sock.off('session.closed', r); 
       sock.off('session.payment_added', r); 
       sock.off('session.payment_removed', r);
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
       clearInterval(id);
     };
   }, []);
+
+  async function handleInstall() {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    if (outcome === 'accepted') setInstallPrompt(null);
+  }
 
   async function load() {
     try { const d = await apiFetch('/api/v1/cashier/sessions'); setSessions(d.sessions); } catch {}
@@ -103,9 +120,19 @@ export default function CashierPage() {
     <main className="min-h-screen p-4">
       <PwaHead manifest="/manifest-cashier.json" />
       <header className="flex justify-between items-center mb-5">
-        <div>
-          <div className="text-2xl font-bold">💰 Caixa</div>
-          <div className="text-sm text-gray-400">{staff?.user?.name}</div>
+        <div className="flex items-center gap-4">
+          <div>
+            <div className="text-2xl font-bold">💰 Caixa</div>
+            <div className="text-sm text-gray-400">{staff?.user?.name}</div>
+          </div>
+          {installPrompt && (
+            <button 
+              onClick={handleInstall}
+              className="btn btn-primary btn-sm flex items-center gap-2"
+            >
+              <Download size={16} /> Instalar App
+            </button>
+          )}
         </div>
         <button onClick={logout} className="btn btn-ghost">Sair</button>
       </header>

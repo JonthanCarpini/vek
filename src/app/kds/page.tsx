@@ -1,8 +1,10 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { apiFetch, loadStaff } from '@/lib/staff-client';
+import { apiFetch, loadStaff, clearStaff } from '@/lib/staff-client';
 import { getSocket, joinRooms } from '@/lib/socket-client';
+import { PwaHead } from '@/components/PwaHead';
+import { Download } from 'lucide-react';
 
 // 3 status visíveis no KDS. 'received' e 'accepted' aparecem em "Aguardando".
 // Ao iniciar preparo, o pedido vai direto para 'preparing'.
@@ -16,8 +18,16 @@ export default function KDSPage() {
   const router = useRouter();
   const [orders, setOrders] = useState<any[]>([]);
   const [staff, setStaff] = useState<any>(null);
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
 
   useEffect(() => {
+    // PWA Install Prompt
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
     const s = loadStaff();
     if (!s) { router.push('/admin/login?next=/kds'); return; }
     setStaff(s);
@@ -29,8 +39,21 @@ export default function KDSPage() {
     sock.on('order.updated', reload);
     sock.on('order.status_changed', reload);
     const i = setInterval(load, 15000);
-    return () => { sock.off('order.created', reload); sock.off('order.updated', reload); sock.off('order.status_changed', reload); clearInterval(i); };
+    return () => { 
+      sock.off('order.created', reload); 
+      sock.off('order.updated', reload); 
+      sock.off('order.status_changed', reload); 
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      clearInterval(i); 
+    };
   }, []);
+
+  async function handleInstall() {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    if (outcome === 'accepted') setInstallPrompt(null);
+  }
 
   async function load() {
     try { const d = await apiFetch('/api/v1/kitchen/orders'); setOrders(d.orders); } catch {}
@@ -88,12 +111,23 @@ export default function KDSPage() {
 
   return (
     <main className="min-h-screen p-4">
+      <PwaHead manifest="/manifest-kitchen.json" />
       <header className="flex justify-between items-center mb-4">
-        <div>
-          <div className="text-2xl font-bold">🍳 KDS — Cozinha</div>
-          <div className="text-sm text-gray-400">{staff?.user?.name}</div>
+        <div className="flex items-center gap-4">
+          <div>
+            <div className="text-2xl font-bold">🍳 KDS — Cozinha</div>
+            <div className="text-sm text-gray-400">{staff?.user?.name}</div>
+          </div>
+          {installPrompt && (
+            <button 
+              onClick={handleInstall}
+              className="btn btn-primary btn-sm flex items-center gap-2"
+            >
+              <Download size={16} /> Instalar App
+            </button>
+          )}
         </div>
-        <button onClick={() => { localStorage.removeItem('md:staff'); router.push('/admin/login'); }} className="btn btn-ghost">Sair</button>
+        <button onClick={() => { clearStaff(); router.push('/admin/login'); }} className="btn btn-ghost">Sair</button>
       </header>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {COLS.map((col) => {

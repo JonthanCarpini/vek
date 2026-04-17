@@ -6,6 +6,7 @@ import { loadStaff, clearStaff, apiFetch } from '@/lib/staff-client';
 import { getSocket, joinRooms } from '@/lib/socket-client';
 import { PwaHead } from '@/components/PwaHead';
 import { playNotificationSound } from '@/lib/notifications';
+import { Download } from 'lucide-react';
 
 type Role = 'super_admin' | 'admin' | 'manager' | 'waiter' | 'kitchen' | 'cashier';
 interface NavItem { href: string; label: string; icon: string; roles: Role[]; external?: boolean }
@@ -71,8 +72,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [unit, setUnit] = useState<any>(null);
   const [storeState, setStoreState] = useState<any>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
 
   function showToast(m: string) { setToast(m); setTimeout(() => setToast(null), 4000); }
+
+  useEffect(() => {
+    // PWA Install Prompt
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+  }, []);
 
   useEffect(() => {
     if (pathname === '/admin/login') return;
@@ -139,6 +151,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     if (unit?.primaryColor) document.documentElement.style.setProperty('--brand', unit.primaryColor);
     if (unit?.name) document.title = `${unit.name} — Admin`;
   }, [unit?.primaryColor, unit?.name]);
+
+  async function handleInstall() {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    if (outcome === 'accepted') setInstallPrompt(null);
+  }
 
   if (pathname === '/admin/login') return <>{children}</>;
   if (!user) return <div className="p-10 text-gray-400">Carregando...</div>;
@@ -210,6 +229,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           )}
         </nav>
         <div className="mt-auto pt-6 border-t border-[color:var(--border)]">
+          {installPrompt && (
+            <button 
+              onClick={handleInstall}
+              className="btn btn-primary btn-sm w-full mb-4 flex items-center justify-center gap-2"
+            >
+              <Download size={14} /> Instalar App
+            </button>
+          )}
           <div className="text-sm truncate">{user.name}</div>
           <div className="text-xs text-gray-500 mb-3">{user.role}</div>
           <button onClick={() => { clearStaff(); router.push('/admin/login'); }} className="btn btn-ghost w-full text-sm">Sair</button>

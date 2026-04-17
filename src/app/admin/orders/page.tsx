@@ -21,6 +21,7 @@ const NEXT_STATUS: Record<string, { to: string; label: string } | null> = {
 export default function AdminOrders() {
   const [orders, setOrders] = useState<any[]>([]);
   const [filter, setFilter] = useState('all');
+  const [selectedOrder, setSelectedOrder] = useState<any>(null);
 
   useEffect(() => { load(); }, [filter]);
   useEffect(() => {
@@ -92,6 +93,7 @@ export default function AdminOrders() {
                     {o.status !== 'cancelled' && o.status !== 'delivered' && (
                       <button onClick={() => cancel(o.id)} className="btn btn-ghost text-xs px-2 py-1 text-red-400">Cancelar</button>
                     )}
+                    <button onClick={() => setSelectedOrder(o)} className="btn btn-ghost text-xs px-2 py-1 text-brand-400 border border-brand-500/20">Ver Itens</button>
                   </div>
                 </td>
               </tr>
@@ -100,6 +102,55 @@ export default function AdminOrders() {
           </tbody>
         </table>
       </div>
+
+      {/* Modal de Detalhes */}
+      {selectedOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-[#13131a] border border-gray-800 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-[#1f1f2b]">
+              <div>
+                <h3 className="text-lg font-bold">Detalhes do Pedido #{selectedOrder.sequenceNumber}</h3>
+                <div className="text-xs text-gray-400">Mesa {selectedOrder.table?.number} • {selectedOrder.session?.customerName}</div>
+              </div>
+              <button onClick={() => setSelectedOrder(null)} className="text-gray-400 hover:text-white text-2xl">&times;</button>
+            </div>
+            <div className="p-4 max-h-[60vh] overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-gray-500 text-left border-b border-gray-800">
+                    <th className="py-2">Item</th>
+                    <th className="py-2 text-center">Qtd</th>
+                    <th className="py-2 text-right">Preço</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-800">
+                  {selectedOrder.items.map((it: any) => (
+                    <tr key={it.id}>
+                      <td className="py-3">
+                        <div className="font-medium">{it.name}</div>
+                        {it.notes && <div className="text-xs text-brand-400 italic">"{it.notes}"</div>}
+                      </td>
+                      <td className="py-3 text-center">{it.quantity}</td>
+                      <td className="py-3 text-right">{formatBRL(Number(it.unitPrice))}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              
+              {selectedOrder.notes && (
+                <div className="mt-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-sm text-amber-200">
+                  <div className="font-bold mb-1">Observações do Pedido:</div>
+                  {selectedOrder.notes}
+                </div>
+              )}
+            </div>
+            <div className="p-4 bg-[#1f1f2b] border-t border-gray-800 flex justify-between items-center">
+              <div className="text-sm text-gray-400">Total</div>
+              <div className="text-xl font-black text-brand-500">{formatBRL(selectedOrder.total)}</div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
