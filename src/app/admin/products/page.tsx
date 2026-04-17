@@ -11,14 +11,24 @@ export default function Products() {
   const [form, setForm] = useState<any>(EMPTY);
   const [editing, setEditing] = useState<any>(null);
   const [open, setOpen] = useState(false);
+  const [filterCat, setFilterCat] = useState<string>('');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'archived'>('active');
+  const [search, setSearch] = useState('');
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [filterCat, filterStatus]);
   async function load() {
     try {
-      const [p, c] = await Promise.all([apiFetch('/api/v1/admin/products'), apiFetch('/api/v1/admin/categories')]);
+      const qs = new URLSearchParams();
+      if (filterCat) qs.set('categoryId', filterCat);
+      if (filterStatus === 'active') qs.set('active', 'true');
+      if (filterStatus === 'archived') qs.set('active', 'false');
+      const q = qs.toString() ? `?${qs}` : '';
+      const [p, c] = await Promise.all([apiFetch(`/api/v1/admin/products${q}`), apiFetch('/api/v1/admin/categories')]);
       setProducts(p.products); setCats(c.categories);
     } catch {}
   }
+
+  const filtered = products.filter((p) => !search || p.name.toLowerCase().includes(search.toLowerCase()));
   async function save(e: React.FormEvent) {
     e.preventDefault();
     try {
@@ -41,12 +51,36 @@ export default function Products() {
 
   return (
     <div>
-      <div className="flex justify-between mb-4">
+      <div className="flex justify-between items-center mb-4">
         <h1 className="text-2xl font-bold">Produtos</h1>
         <button onClick={() => { setEditing(null); setForm(EMPTY); setOpen(true); }} className="btn btn-primary">+ Novo</button>
       </div>
+
+      <div className="card p-3 mb-4 flex flex-wrap gap-3 items-end">
+        <div className="flex-1 min-w-[180px]">
+          <label className="label">Buscar</label>
+          <input className="input" placeholder="Nome do produto..." value={search} onChange={(e) => setSearch(e.target.value)} />
+        </div>
+        <div className="min-w-[160px]">
+          <label className="label">Categoria</label>
+          <select className="input" value={filterCat} onChange={(e) => setFilterCat(e.target.value)}>
+            <option value="">Todas</option>
+            {cats.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+        <div className="min-w-[140px]">
+          <label className="label">Status</label>
+          <select className="input" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as any)}>
+            <option value="active">Ativos</option>
+            <option value="archived">Arquivados</option>
+            <option value="all">Todos</option>
+          </select>
+        </div>
+        <div className="text-sm text-gray-400 ml-auto">{filtered.length} produto(s)</div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {products.map((p: any) => (
+        {filtered.map((p: any) => (
           <div key={p.id} className="card p-3 flex gap-3">
             {p.imageUrl ? <img src={p.imageUrl} alt="" className="w-20 h-20 rounded object-cover" /> : <div className="w-20 h-20 bg-[#1f1f2b] rounded" />}
             <div className="flex-1 min-w-0">

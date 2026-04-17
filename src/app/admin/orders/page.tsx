@@ -8,6 +8,14 @@ const STATUS_LABEL: Record<string, string> = {
   all: 'Todos', received: 'Recebido', accepted: 'Aceito', preparing: 'Em preparo',
   ready: 'Pronto', delivered: 'Entregue', cancelled: 'Cancelado',
 };
+const NEXT_STATUS: Record<string, { to: string; label: string } | null> = {
+  received: { to: 'accepted', label: 'Aceitar' },
+  accepted: { to: 'preparing', label: 'Iniciar preparo' },
+  preparing: { to: 'ready', label: 'Marcar pronto' },
+  ready: { to: 'delivered', label: 'Entregar' },
+  delivered: null,
+  cancelled: null,
+};
 
 export default function AdminOrders() {
   const [orders, setOrders] = useState<any[]>([]);
@@ -29,6 +37,20 @@ export default function AdminOrders() {
     } catch {}
   }
 
+  async function advance(id: string, to: string) {
+    try {
+      await apiFetch(`/api/v1/kitchen/orders/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status: to }) });
+      load();
+    } catch (e: any) { alert(e.message); }
+  }
+  async function cancel(id: string) {
+    if (!confirm('Cancelar este pedido?')) return;
+    try {
+      await apiFetch(`/api/v1/kitchen/orders/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'cancelled' }) });
+      load();
+    } catch (e: any) { alert(e.message); }
+  }
+
   return (
     <div>
       <h1 className="text-2xl font-bold mb-4">Pedidos</h1>
@@ -46,7 +68,7 @@ export default function AdminOrders() {
             <tr>
               <th className="p-3">#</th><th className="p-3">Mesa</th><th className="p-3">Cliente</th>
               <th className="p-3">Itens</th><th className="p-3">Total</th>
-              <th className="p-3">Status</th><th className="p-3">Hora</th>
+              <th className="p-3">Status</th><th className="p-3">Hora</th><th className="p-3">Ações</th>
             </tr>
           </thead>
           <tbody>
@@ -59,9 +81,21 @@ export default function AdminOrders() {
                 <td className="p-3 font-semibold">R$ {Number(o.total).toFixed(2)}</td>
                 <td className="p-3"><span className="badge">{STATUS_LABEL[o.status]}</span></td>
                 <td className="p-3 text-gray-400">{new Date(o.createdAt).toLocaleTimeString('pt-BR')}</td>
+                <td className="p-3">
+                  <div className="flex gap-1">
+                    {NEXT_STATUS[o.status] && (
+                      <button onClick={() => advance(o.id, NEXT_STATUS[o.status]!.to)} className="btn btn-primary text-xs px-2 py-1">
+                        {NEXT_STATUS[o.status]!.label}
+                      </button>
+                    )}
+                    {o.status !== 'cancelled' && o.status !== 'delivered' && (
+                      <button onClick={() => cancel(o.id)} className="btn btn-ghost text-xs px-2 py-1 text-red-400">Cancelar</button>
+                    )}
+                  </div>
+                </td>
               </tr>
             ))}
-            {orders.length === 0 && <tr><td colSpan={7} className="p-6 text-center text-gray-500">Nenhum pedido</td></tr>}
+            {orders.length === 0 && <tr><td colSpan={8} className="p-6 text-center text-gray-500">Nenhum pedido</td></tr>}
           </tbody>
         </table>
       </div>

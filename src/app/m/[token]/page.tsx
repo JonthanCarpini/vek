@@ -16,7 +16,7 @@ const STATUS_LABEL: Record<string, string> = {
 export default function ClientPage() {
   const params = useParams<{ token: string }>();
   const qrToken = params.token;
-  const [step, setStep] = useState<'checkin' | 'menu'>('checkin');
+  const [step, setStep] = useState<'intro' | 'checkin' | 'menu' | 'browse'>('intro');
   const [token, setToken] = useState<string>('');
   const [session, setSession] = useState<any>(null);
   const [name, setName] = useState(''); const [phone, setPhone] = useState('');
@@ -28,6 +28,7 @@ export default function ClientPage() {
   const [cartOpen, setCartOpen] = useState(false);
   const [orders, setOrders] = useState<Order[]>([]);
   const [toast, setToast] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   // Recupera sessão do localStorage
   useEffect(() => {
@@ -50,7 +51,21 @@ export default function ClientPage() {
       s.on('order.updated', () => loadOrders());
       return () => { s.off('order.status_changed', onStatus); s.off('order.updated'); };
     }
+    if (step === 'browse') {
+      loadMenuPublic();
+    }
   }, [step, token]);
+
+  async function loadMenuPublic() {
+    const r = await fetch(`/api/v1/public/menu?qrToken=${encodeURIComponent(qrToken)}`);
+    const j = await r.json();
+    if (r.ok) {
+      setCategories(j.data.categories);
+      if (j.data.categories[0]) setActiveCat(j.data.categories[0].id);
+    } else {
+      setErr(j?.error?.message || 'Erro ao carregar cardápio');
+    }
+  }
 
   function showToast(m: string) { setToast(m); setTimeout(() => setToast(null), 3000); }
 
@@ -121,11 +136,34 @@ export default function ClientPage() {
     showToast(type === 'waiter' ? 'Garçom chamado' : 'Pedido de conta enviado');
   }
 
+  if (step === 'intro') {
+    return (
+      <main className="min-h-screen flex items-center justify-center p-5">
+        <div className="w-full max-w-md space-y-5">
+          <div className="text-center">
+            <div className="text-4xl mb-2">🍔</div>
+            <div className="text-3xl font-bold">Bem-vindo!</div>
+            <p className="text-gray-400 mt-2 text-sm">O que você quer fazer agora?</p>
+          </div>
+          <button onClick={() => setStep('checkin')} className="card p-5 w-full text-left hover:border-brand-600 transition">
+            <div className="text-xl font-bold">🍽️ Iniciar minha mesa</div>
+            <p className="text-sm text-gray-400 mt-1">Abra uma conta, peça pelo app e acompanhe o preparo em tempo real.</p>
+          </button>
+          <button onClick={() => setStep('browse')} className="card p-5 w-full text-left hover:border-brand-600 transition">
+            <div className="text-xl font-bold">📖 Apenas ver o cardápio</div>
+            <p className="text-sm text-gray-400 mt-1">Explore os produtos sem fazer pedido ainda.</p>
+          </button>
+        </div>
+      </main>
+    );
+  }
+
   if (step === 'checkin') {
     return (
       <main className="min-h-screen flex items-center justify-center p-5">
         <form onSubmit={checkin} className="card p-6 w-full max-w-md">
-          <div className="text-3xl font-bold mb-1">Bem-vindo 👋</div>
+          <button type="button" onClick={() => setStep('intro')} className="text-sm text-gray-400 mb-3">← Voltar</button>
+          <div className="text-3xl font-bold mb-1">Iniciar mesa 👋</div>
           <p className="text-gray-400 mb-6 text-sm">Informe seus dados para começar</p>
           <label className="label">Nome do responsável</label>
           <input className="input mb-4" value={name} onChange={(e) => setName(e.target.value)} required minLength={2} />
@@ -134,6 +172,44 @@ export default function ClientPage() {
           {err && <div className="text-red-400 text-sm mb-3">{err}</div>}
           <button className="btn btn-primary w-full" disabled={loading}>{loading ? 'Entrando...' : 'Começar pedido'}</button>
         </form>
+      </main>
+    );
+  }
+
+  if (step === 'browse') {
+    const activeCategoryBrowse = categories.find((c) => c.id === activeCat);
+    return (
+      <main className="min-h-screen pb-16">
+        <header className="sticky top-0 z-20 bg-[color:var(--bg)]/90 backdrop-blur border-b border-[color:var(--border)] px-4 py-3 flex items-center justify-between">
+          <div>
+            <div className="text-xs text-gray-400">Apenas visualização</div>
+            <div className="text-lg font-bold">Cardápio</div>
+          </div>
+          <button onClick={() => setStep('intro')} className="btn btn-primary text-sm">Iniciar mesa</button>
+        </header>
+        {err && <div className="p-4 text-red-400 text-sm">{err}</div>}
+        <div className="sticky top-[60px] z-10 bg-[color:var(--bg)]/90 backdrop-blur border-b border-[color:var(--border)] overflow-x-auto scroll-none px-3 py-2">
+          <div className="flex gap-2">
+            {categories.map((c) => (
+              <button key={c.id} onClick={() => setActiveCat(c.id)}
+                className={`px-3 py-1.5 rounded-full whitespace-nowrap text-sm ${activeCat === c.id ? 'bg-brand-600 text-white' : 'bg-[#1f1f2b] text-gray-300'}`}>
+                {c.name}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {activeCategoryBrowse?.products.map((p) => (
+            <div key={p.id} className="card p-3 flex gap-3">
+              {p.imageUrl ? <img src={p.imageUrl} alt="" className="w-20 h-20 rounded-lg object-cover" /> : <div className="w-20 h-20 rounded-lg bg-[#1f1f2b]" />}
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold truncate">{p.name}</div>
+                {p.description && <div className="text-xs text-gray-400 line-clamp-2">{p.description}</div>}
+                <div className="mt-1 text-brand-500 font-bold">R$ {p.price.toFixed(2)}</div>
+              </div>
+            </div>
+          ))}
+        </div>
       </main>
     );
   }
@@ -151,12 +227,15 @@ export default function ClientPage() {
         <button onClick={() => call('waiter')} className="btn btn-ghost text-sm">🙋 Garçom</button>
       </header>
 
-      {activeOrders.length > 0 && (
+      {orders.length > 0 && (
         <div className="px-4 pt-3">
           <div className="card p-3">
-            <div className="text-sm text-gray-400 mb-2">Seus pedidos</div>
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-sm text-gray-400">Seus pedidos ({orders.length})</div>
+              <button onClick={() => setHistoryOpen(true)} className="text-xs text-brand-500 hover:underline">Ver todos</button>
+            </div>
             <div className="flex flex-col gap-2">
-              {activeOrders.map((o) => (
+              {activeOrders.slice(0, 3).map((o) => (
                 <div key={o.id} className="flex items-center justify-between">
                   <div className="text-sm">#{o.sequenceNumber} • R$ {o.total.toFixed(2)}</div>
                   <span className={`badge ${o.status === 'ready' ? 'badge-ok' : o.status === 'preparing' ? 'badge-warn' : 'badge-info'}`}>
@@ -164,6 +243,7 @@ export default function ClientPage() {
                   </span>
                 </div>
               ))}
+              {activeOrders.length === 0 && <div className="text-sm text-gray-500">Todos os pedidos foram entregues</div>}
             </div>
           </div>
         </div>
@@ -236,6 +316,53 @@ export default function ClientPage() {
             <button onClick={submitOrder} disabled={loading} className="btn btn-primary w-full mt-4">
               {loading ? 'Enviando...' : 'Enviar pedido'}
             </button>
+          </div>
+        </div>
+      )}
+
+      {historyOpen && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-end" onClick={() => setHistoryOpen(false)}>
+          <div className="bg-[color:var(--card)] w-full rounded-t-2xl max-h-[85vh] overflow-y-auto p-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <div className="text-xl font-bold">Histórico da mesa</div>
+              <button onClick={() => setHistoryOpen(false)} className="text-gray-400">✕</button>
+            </div>
+            {orders.length === 0 && <div className="text-gray-500 text-center py-8">Nenhum pedido ainda</div>}
+            <div className="flex flex-col gap-3">
+              {orders.map((o) => (
+                <div key={o.id} className="card p-3">
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <div className="font-bold">#{o.sequenceNumber}</div>
+                      <div className="text-xs text-gray-500">{new Date(o.createdAt).toLocaleTimeString('pt-BR')}</div>
+                    </div>
+                    <span className={`badge ${o.status === 'delivered' ? 'badge-ok' : o.status === 'ready' ? 'badge-ok' : o.status === 'cancelled' ? 'bg-red-600/20 text-red-300' : 'badge-warn'}`}>
+                      {STATUS_LABEL[o.status]}
+                    </span>
+                  </div>
+                  <ul className="text-sm space-y-1 mb-2">
+                    {o.items.map((i: any, idx: number) => (
+                      <li key={idx} className="flex justify-between">
+                        <span>{i.quantity}× {i.name}</span>
+                        <span className="text-gray-400">R$ {(Number(i.unitPrice) * i.quantity).toFixed(2)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="flex justify-between border-t border-gray-800 pt-2 font-semibold">
+                    <span>Total</span>
+                    <span className="text-brand-500">R$ {Number(o.total).toFixed(2)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {orders.length > 0 && (
+              <div className="mt-4 card p-3 bg-brand-600/10 border-brand-600/30">
+                <div className="flex justify-between font-bold text-lg">
+                  <span>Total da mesa</span>
+                  <span className="text-brand-500">R$ {orders.filter((o) => o.status !== 'cancelled').reduce((s, o) => s + Number(o.total), 0).toFixed(2)}</span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

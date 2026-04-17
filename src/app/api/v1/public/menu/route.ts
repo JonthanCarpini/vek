@@ -6,8 +6,13 @@ import { getSessionFromRequest } from '@/lib/auth';
 export async function GET(req: NextRequest) {
   try {
     const session = getSessionFromRequest(req);
-    const unitId = session?.uid || req.nextUrl.searchParams.get('unitId');
-    if (!unitId) return unauthorized('Sessão ou unitId necessário');
+    let unitId: string | null = session?.uid || req.nextUrl.searchParams.get('unitId');
+    const qrToken = req.nextUrl.searchParams.get('qrToken');
+    if (!unitId && qrToken) {
+      const table = await prisma.tableEntity.findUnique({ where: { qrToken }, select: { unitId: true } });
+      if (table) unitId = table.unitId;
+    }
+    if (!unitId) return unauthorized('Sessão, unitId ou qrToken necessário');
 
     const categories = await prisma.category.findMany({
       where: { unitId, active: true },

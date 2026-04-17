@@ -11,8 +11,10 @@ export async function GET(req: NextRequest) {
     const unitId = g.staff.unitId || req.nextUrl.searchParams.get('unitId');
     if (!unitId) return fail('unitId necessário', 400);
     const categoryId = req.nextUrl.searchParams.get('categoryId') || undefined;
+    const activeParam = req.nextUrl.searchParams.get('active');
+    const activeFilter = activeParam === 'true' ? { active: true } : activeParam === 'false' ? { active: false } : {};
     const products = await prisma.product.findMany({
-      where: { unitId, ...(categoryId ? { categoryId } : {}) },
+      where: { unitId, ...(categoryId ? { categoryId } : {}), ...activeFilter },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
       include: { category: { select: { name: true } } },
     });
