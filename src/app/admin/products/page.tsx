@@ -175,73 +175,120 @@ export default function Products() {
       </div>
 
       {open && (
-        <div className="fixed inset-0 bg-black/60 z-40 flex items-center justify-center p-4" onClick={() => setOpen(false)}>
-          <form onSubmit={save} className="card p-5 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-            <div className="text-lg font-bold mb-4">{editing ? 'Editar produto' : 'Novo produto'}</div>
-            <label className="label">Categoria</label>
-            <select className="input mb-3" value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })} required>
-              <option value="">—</option>
-              {cats.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-            <label className="label">Nome</label>
-            <input className="input mb-3" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-            <label className="label">Descrição</label>
-            <textarea className="input mb-3" rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className="label">Preço</label><input type="number" step="0.01" className="input" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} required /></div>
-              <div><label className="label">Preparo (min)</label><input type="number" className="input" value={form.preparationTimeMin} onChange={(e) => setForm({ ...form, preparationTimeMin: e.target.value })} /></div>
-            </div>
-            <div className="mt-3 mb-3">
-              <ImageUpload
-                label="Imagem do produto"
-                value={form.imageUrl}
-                onChange={(url) => setForm({ ...form, imageUrl: url || '' })}
-              />
-            </div>
-            <label className="label">Estação</label>
-            <select className="input mb-3" value={form.station} onChange={(e) => setForm({ ...form, station: e.target.value })}>
-              <option value="cozinha">Cozinha</option><option value="bar">Bar</option><option value="grill">Grill</option>
-            </select>
-            <div className="flex gap-4 mb-3 flex-wrap">
-              <label className="flex items-center gap-2"><input type="checkbox" checked={form.available} onChange={(e) => setForm({ ...form, available: e.target.checked })} /> Disponível</label>
-              <label className="flex items-center gap-2"><input type="checkbox" checked={form.featured} onChange={(e) => setForm({ ...form, featured: e.target.checked })} /> ⭐ Destaque (Painel TV)</label>
-            </div>
-            {form.featured && (
-              <VideoUploadInline
-                value={form.videoUrl}
-                onChange={(url) => setForm({ ...form, videoUrl: url || '' })}
-              />
-            )}
+        <div className="fixed inset-0 bg-black/70 z-40 flex items-stretch md:items-center justify-center p-0 md:p-4" onClick={() => setOpen(false)}>
+          <form onSubmit={save}
+            className="bg-[#0b0b0f] border border-[color:var(--border)] w-full md:max-w-4xl md:rounded-2xl shadow-2xl flex flex-col max-h-screen md:max-h-[92vh]"
+            onClick={(e) => e.stopPropagation()}>
 
-            <div className="mb-3 border border-gray-800 rounded p-3">
-              <div className="flex justify-between items-center mb-2">
-                <label className="label !mb-0">🥬 Ingredientes</label>
-                <button type="button" onClick={addIngredient} disabled={ingredients.length === 0 || form.ingredients.length >= ingredients.length} className="btn btn-ghost text-xs">+ Adicionar</button>
-              </div>
-              {ingredients.length === 0 && <div className="text-xs text-gray-500">Nenhum ingrediente cadastrado. Cadastre em "Ingredientes" no menu.</div>}
-              {form.ingredients.length === 0 && ingredients.length > 0 && <div className="text-xs text-gray-500">Sem ingredientes vinculados.</div>}
-              <div className="space-y-2">
-                {form.ingredients.map((it: any, idx: number) => {
-                  const ing = ingredients.find((i) => i.id === it.ingredientId);
-                  return (
-                    <div key={idx} className="flex gap-2 items-center">
-                      <select className="input flex-1" value={it.ingredientId} onChange={(e) => updateIngredient(idx, { ingredientId: e.target.value })}>
-                        {ingredients.map((i) => <option key={i.id} value={i.id}>{i.name} ({i.unitOfMeasure})</option>)}
-                      </select>
-                      <input type="number" step="0.001" className="input w-24" value={it.quantity} onChange={(e) => updateIngredient(idx, { quantity: e.target.value })} />
-                      <span className="text-xs text-gray-500 w-8">{ing?.unitOfMeasure || ''}</span>
-                      <label className="flex items-center gap-1 text-xs"><input type="checkbox" checked={it.optional} onChange={(e) => updateIngredient(idx, { optional: e.target.checked })} /> opc.</label>
-                      <button type="button" onClick={() => removeIngredient(idx)} className="text-red-400 text-xs">✕</button>
+            <header className="flex items-center justify-between px-5 py-3 border-b border-[color:var(--border)] sticky top-0 bg-[#0b0b0f] z-10">
+              <div className="text-lg font-bold">{editing ? 'Editar produto' : 'Novo produto'}</div>
+              <button type="button" onClick={() => setOpen(false)} className="text-gray-400 hover:text-white text-xl leading-none">×</button>
+            </header>
+
+            <div className="flex-1 overflow-y-auto px-5 py-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+                {/* Coluna esquerda: informações */}
+                <section className="space-y-3">
+                  <div>
+                    <label className="label">Categoria *</label>
+                    <select className="input" value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })} required>
+                      <option value="">—</option>
+                      {cats.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="label">Nome *</label>
+                    <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+                  </div>
+                  <div>
+                    <label className="label">Descrição</label>
+                    <textarea className="input" rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="label">Preço *</label>
+                      <input type="number" step="0.01" className="input" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} required />
                     </div>
-                  );
-                })}
+                    <div>
+                      <label className="label">Preparo (min)</label>
+                      <input type="number" className="input" value={form.preparationTimeMin} onChange={(e) => setForm({ ...form, preparationTimeMin: e.target.value })} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="label">Estação</label>
+                    <select className="input" value={form.station} onChange={(e) => setForm({ ...form, station: e.target.value })}>
+                      <option value="cozinha">Cozinha</option>
+                      <option value="bar">Bar</option>
+                      <option value="grill">Grill</option>
+                    </select>
+                  </div>
+                  <div className="flex gap-4 flex-wrap pt-2">
+                    <label className="flex items-center gap-2 text-sm">
+                      <input type="checkbox" checked={form.available} onChange={(e) => setForm({ ...form, available: e.target.checked })} />
+                      Disponível
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <input type="checkbox" checked={form.featured} onChange={(e) => setForm({ ...form, featured: e.target.checked })} />
+                      ⭐ Destaque (Painel TV)
+                    </label>
+                  </div>
+                </section>
+
+                {/* Coluna direita: mídia + ingredientes */}
+                <section className="space-y-4">
+                  <ImageUpload
+                    label="Imagem do produto"
+                    value={form.imageUrl}
+                    onChange={(url) => setForm({ ...form, imageUrl: url || '' })}
+                  />
+                  {form.featured && (
+                    <VideoUploadInline
+                      value={form.videoUrl}
+                      onChange={(url) => setForm({ ...form, videoUrl: url || '' })}
+                    />
+                  )}
+
+                  <div className="border border-gray-800 rounded-lg p-3">
+                    <div className="flex justify-between items-center mb-2">
+                      <label className="label !mb-0">🥬 Ingredientes</label>
+                      <button type="button" onClick={addIngredient}
+                        disabled={ingredients.length === 0 || form.ingredients.length >= ingredients.length}
+                        className="btn btn-ghost text-xs">+ Adicionar</button>
+                    </div>
+                    {ingredients.length === 0 && <div className="text-xs text-gray-500">Nenhum ingrediente cadastrado. Cadastre no menu "Ingredientes".</div>}
+                    {form.ingredients.length === 0 && ingredients.length > 0 && <div className="text-xs text-gray-500">Sem ingredientes vinculados.</div>}
+                    <div className="space-y-2">
+                      {form.ingredients.map((it: any, idx: number) => {
+                        const ing = ingredients.find((i) => i.id === it.ingredientId);
+                        return (
+                          <div key={idx} className="flex gap-2 items-center">
+                            <select className="input flex-1 min-w-0" value={it.ingredientId}
+                              onChange={(e) => updateIngredient(idx, { ingredientId: e.target.value })}>
+                              {ingredients.map((i) => <option key={i.id} value={i.id}>{i.name} ({i.unitOfMeasure})</option>)}
+                            </select>
+                            <input type="number" step="0.001" className="input w-20" value={it.quantity}
+                              onChange={(e) => updateIngredient(idx, { quantity: e.target.value })} />
+                            <span className="text-xs text-gray-500 w-8">{ing?.unitOfMeasure || ''}</span>
+                            <label className="flex items-center gap-1 text-xs whitespace-nowrap">
+                              <input type="checkbox" checked={it.optional}
+                                onChange={(e) => updateIngredient(idx, { optional: e.target.checked })} />
+                              opc.
+                            </label>
+                            <button type="button" onClick={() => removeIngredient(idx)} className="text-red-400 text-sm">✕</button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </section>
               </div>
             </div>
 
-            <div className="flex gap-2">
-              <button className="btn btn-primary flex-1">Salvar</button>
+            <footer className="flex gap-2 px-5 py-3 border-t border-[color:var(--border)] sticky bottom-0 bg-[#0b0b0f]">
               <button type="button" onClick={() => setOpen(false)} className="btn btn-ghost">Cancelar</button>
-            </div>
+              <button className="btn btn-primary flex-1">{editing ? 'Atualizar' : 'Cadastrar'}</button>
+            </footer>
           </form>
         </div>
       )}

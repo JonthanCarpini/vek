@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getSocket } from '@/lib/socket-client';
 import { formatBRL } from '@/lib/format';
 
@@ -18,9 +18,13 @@ const STATUS_COLORS: Record<string, string> = {
   ready: 'bg-green-600',
 };
 
+type Media = { kind: 'playlist' | 'featured'; id: string; type?: string; url?: string; durationSec?: number; title?: string; subtitle?: string; product?: any };
+
 export default function DisplayPage() {
-  const [data, setData] = useState<any>({ unit: null, orders: [], featured: [] });
+  const [data, setData] = useState<any>({ unit: null, orders: [], featured: [], playlist: [] });
   const [idx, setIdx] = useState(0);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const timerRef = useRef<any>(null);
 
   async function load() {
     try {
@@ -32,7 +36,7 @@ export default function DisplayPage() {
 
   useEffect(() => {
     load();
-    const t = setInterval(load, 8000);
+    const t = setInterval(load, 15000);
     return () => clearInterval(t);
   }, []);
 
@@ -43,19 +47,38 @@ export default function DisplayPage() {
     const r = () => load();
     sock.on('order.created', r);
     sock.on('order.status_changed', r);
-    return () => { sock.off('order.created', r); sock.off('order.status_changed', r); };
+    sock.on('store.state_changed', r);
+    return () => { sock.off('order.created', r); sock.off('order.status_changed', r); sock.off('store.state_changed', r); };
   }, [data.unit?.id]);
 
+  // Playlist: primeiro DisplayItem (playlist curada), fallback para produtos em destaque.
+  const medias: Media[] = (() => {
+    if (data.playlist?.length) {
+      return data.playlist.map((p: any) => ({
+        kind: 'playlist', id: p.id, type: p.type, url: p.url, durationSec: p.durationSec,
+        title: p.title, subtitle: p.subtitle,
+      }));
+    }
+    return (data.featured || []).map((p: any) => ({ kind: 'featured', id: p.id, product: p }));
+  })();
+
+  // Avança mídia. Para vídeo, avança no onEnded; para imagem/destaque, timer.
   useEffect(() => {
-    if (!data.featured?.length) return;
-    const t = setInterval(() => setIdx((i) => (i + 1) % data.featured.length), 6000);
-    return () => clearInterval(t);
-  }, [data.featured?.length]);
+    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
+    if (medias.length === 0) return;
+    const cur = medias[idx % medias.length];
+    if (cur.kind === 'playlist' && cur.type === 'video') return; // vídeo avança no onEnded
+    const ms = (cur.kind === 'playlist' ? (cur.durationSec || 8) : 8) * 1000;
+    timerRef.current = setTimeout(() => setIdx((i) => (i + 1) % medias.length), ms);
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  }, [idx, medias.length]);
+
+  useEffect(() => { if (idx >= medias.length && medias.length > 0) setIdx(0); }, [medias.length]);
 
   const primary = data.unit?.primaryColor || '#ea580c';
   const ready = data.orders.filter((o: any) => o.status === 'ready');
   const inProgress = data.orders.filter((o: any) => o.status !== 'ready');
-  const featured = data.featured?.[idx];
+  const current = medias[idx % Math.max(1, medias.length)];
 
   return (
     <main className="min-h-screen bg-[#0b0b0f] text-white overflow-hidden">
@@ -74,36 +97,59 @@ export default function DisplayPage() {
       </header>
 
       <div className="grid grid-cols-3 gap-6 p-8 h-[calc(100vh-120px)]">
-        {/* Featured */}
+        {/* Playlist / Destaques */}
         <div className="col-span-1 flex flex-col">
-          <h2 className="text-2xl font-bold mb-4" style={{ color: primary }}>🔥 Destaques</h2>
-          {featured ? (
+          <h2 className="text-2xl font-bold mb-4" style={{ color: primary }}>
+            {data.playlist?.length > 0 ? '� Em destaque' : '�🔥 Destaques'}
+          </h2>
+          {current ? (
             <div className="card flex-1 flex flex-col overflow-hidden">
-              {featured.videoUrl ? (
-                <video
-                  key={featured.id}
-                  src={featured.videoUrl}
-                  autoPlay muted loop playsInline
-                  className="w-full h-96 object-cover bg-black"
-                />
-              ) : featured.imageUrl ? (
-                <img src={featured.imageUrl} alt={featured.name} className="w-full h-96 object-cover" />
-              ) : (
-                <div className="w-full h-96 bg-gray-800 flex items-center justify-center text-6xl">🍔</div>
-              )}
-              <div className="p-6 flex-1 flex flex-col">
-                <div className="text-xs uppercase tracking-widest text-gray-500">{featured.category?.name}</div>
-                <div className="text-3xl font-bold mt-1">{featured.name}</div>
-                <div className="text-gray-300 mt-2 flex-1">{featured.description}</div>
-                <div className="text-4xl font-extrabold mt-4" style={{ color: primary }}>{formatBRL(featured.price)}</div>
-              </div>
+              {current.kind === 'playlist' ? (
+                <>
+                  {current.type === 'video' ? (
+                    <video
+                      ref={videoRef}
+                      key={current.id}
+                      src={current.url}
+                      autoPlay muted playsInline
+                      onEnded={() => setIdx((i) => (i + 1) % medias.length)}
+                      className="w-full flex-1 object-cover bg-black"
+                    />
+                  ) : (
+                    <img key={current.id} src={current.url} alt="" className="w-full flex-1 object-cover" />
+                  )}
+                  {(current.title || current.subtitle) && (
+                    <div className="p-4 bg-black/60 absolute bottom-0 left-0 right-0">
+                      {current.title && <div className="text-2xl font-bold">{current.title}</div>}
+                      {current.subtitle && <div className="text-gray-300">{current.subtitle}</div>}
+                    </div>
+                  )}
+                </>
+              ) : current.product ? (
+                <>
+                  {current.product.videoUrl ? (
+                    <video key={current.product.id} src={current.product.videoUrl}
+                      autoPlay muted loop playsInline className="w-full h-96 object-cover bg-black" />
+                  ) : current.product.imageUrl ? (
+                    <img src={current.product.imageUrl} alt={current.product.name} className="w-full h-96 object-cover" />
+                  ) : (
+                    <div className="w-full h-96 bg-gray-800 flex items-center justify-center text-6xl">🍔</div>
+                  )}
+                  <div className="p-6 flex-1 flex flex-col">
+                    <div className="text-xs uppercase tracking-widest text-gray-500">{current.product.category?.name}</div>
+                    <div className="text-3xl font-bold mt-1">{current.product.name}</div>
+                    <div className="text-gray-300 mt-2 flex-1">{current.product.description}</div>
+                    <div className="text-4xl font-extrabold mt-4" style={{ color: primary }}>{formatBRL(current.product.price)}</div>
+                  </div>
+                </>
+              ) : null}
             </div>
           ) : (
-            <div className="card flex-1 flex items-center justify-center text-gray-500">Nenhum destaque</div>
+            <div className="card flex-1 flex items-center justify-center text-gray-500">Nenhum conteúdo cadastrado</div>
           )}
           <div className="flex gap-1 mt-3 justify-center">
-            {data.featured?.map((_: any, i: number) => (
-              <div key={i} className={`w-2 h-2 rounded-full ${i === idx ? 'bg-white' : 'bg-gray-600'}`} />
+            {medias.map((_, i) => (
+              <div key={i} className={`w-2 h-2 rounded-full ${i === idx % medias.length ? 'bg-white' : 'bg-gray-600'}`} />
             ))}
           </div>
         </div>

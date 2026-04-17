@@ -150,4 +150,21 @@ export const settingsSchema = z.object({
   logoUrl: z.string().max(500).optional().nullable(),
   primaryColor: z.string().max(16).optional().nullable(),
   serviceFee: z.number().min(0).max(1).optional(),
+  paymentMethods: z.string().max(200).optional(),
+  onlinePaymentEnabled: z.boolean().optional(),
+  onlinePaymentProvider: z.string().max(30).optional().nullable(),
+  mpAccessToken: z.string().max(500).optional().nullable(),
+  mpPublicKey: z.string().max(200).optional().nullable(),
+  asaasApiKey: z.string().max(500).optional().nullable(),
+  asaasWebhookToken: z.string().max(200).optional().nullable(),
+});
+
+export const displayItemSchema = z.object({
+  type: z.enum(['image', 'video']),
+  url: z.string().min(1).max(500),
+  durationSec: z.number().int().min(1).max(600).optional(),
+  sortOrder: z.number().int().optional(),
+  active: z.boolean().optional(),
+  title: z.string().max(120).optional().nullable(),
+  subtitle: z.string().max(200).optional().nullable(),
 });

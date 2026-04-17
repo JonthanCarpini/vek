@@ -36,7 +36,13 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     const g = requireStaff(req, ROLES.MANAGER_UP);
     if (!g.ok) return g.res;
     const { id } = await params;
+    // Se a mesa nunca teve sessões, pode ser excluída. Caso contrário, apenas desabilita.
+    const count = await prisma.tableSession.count({ where: { tableId: id } });
+    if (count === 0) {
+      await prisma.tableEntity.delete({ where: { id } });
+      return ok({ deleted: true });
+    }
     await prisma.tableEntity.update({ where: { id }, data: { status: 'disabled' } });
-    return ok({ disabled: true });
+    return ok({ deleted: false, disabled: true });
   } catch (e) { return serverError(e); }
 }

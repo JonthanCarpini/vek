@@ -2,7 +2,8 @@
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { loadStaff, clearStaff } from '@/lib/staff-client';
+import { loadStaff, clearStaff, apiFetch } from '@/lib/staff-client';
+import { getSocket, joinRooms } from '@/lib/socket-client';
 
 type Role = 'super_admin' | 'admin' | 'manager' | 'waiter' | 'kitchen' | 'cashier';
 interface NavItem { href: string; label: string; icon: string; roles: Role[]; external?: boolean }
@@ -16,6 +17,8 @@ const NAV: NavItem[] = [
   { href: '/admin/ingredients', label: 'Ingredientes', icon: '🥬', roles: ADMIN_FULL },
   { href: '/admin/tables', label: 'Mesas & QR', icon: '🪑', roles: ADMIN_FULL },
   { href: '/admin/calls', label: 'Chamadas', icon: '🙋', roles: ADMIN_FULL },
+  { href: '/admin/customers', label: 'Clientes', icon: '🧑', roles: ADMIN_FULL },
+  { href: '/admin/display', label: 'Painel TV (mídia)', icon: '📺', roles: ADMIN_FULL },
   { href: '/admin/users', label: 'Usuários', icon: '👥', roles: ['super_admin', 'admin'] },
   { href: '/admin/reports', label: 'Relatórios', icon: '📈', roles: ADMIN_FULL },
   { href: '/admin/settings', label: 'Configurações', icon: '⚙️', roles: ADMIN_FULL },
@@ -36,6 +39,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const router = useRouter();
   const pathname = usePathname();
   const [user, setUser] = useState<any>(null);
+  const [unit, setUnit] = useState<any>(null);
+  const [storeState, setStoreState] = useState<any>(null);
 
   useEffect(() => {
     if (pathname === '/admin/login') return;
@@ -49,6 +54,38 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     setUser(s.user);
   }, [pathname]);
 
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    async function load() {
+      try {
+        const [u, st] = await Promise.all([
+          fetch('/api/v1/public/unit').then((r) => r.json()).catch(() => null),
+          apiFetch('/api/v1/admin/store-state').catch(() => null),
+        ]);
+        if (cancelled) return;
+        if (u?.data?.unit) setUnit(u.data.unit);
+        if (st?.state) setStoreState(st.state);
+      } catch {}
+    }
+    load();
+    const i = setInterval(load, 15000);
+    if (user?.unitId) {
+      joinRooms([`unit:${user.unitId}:dashboard`]);
+      const sock = getSocket();
+      const r = () => load();
+      sock.on('store.state_changed', r);
+      return () => { clearInterval(i); cancelled = true; sock.off('store.state_changed', r); };
+    }
+    return () => { clearInterval(i); cancelled = true; };
+  }, [user]);
+
+  // Aplica cor primária + título dinâmicos
+  useEffect(() => {
+    if (unit?.primaryColor) document.documentElement.style.setProperty('--brand', unit.primaryColor);
+    if (unit?.name) document.title = `${unit.name} — Admin`;
+  }, [unit?.primaryColor, unit?.name]);
+
   if (pathname === '/admin/login') return <>{children}</>;
   if (!user) return <div className="p-10 text-gray-400">Carregando...</div>;
 
@@ -56,10 +93,33 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const navItems = NAV.filter((n) => n.roles.includes(role));
   const shortcuts = SHORTCUTS.filter((n) => n.roles.includes(role));
 
+  const statusOpen = storeState?.open === true;
+  const statusText = storeState ? (statusOpen ? 'Loja ABERTA' : 'Loja FECHADA') : 'Verificando...';
+  const statusReason = storeState?.reason;
+
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-screen flex flex-col">
+      <div className={`flex items-center justify-between px-4 py-2 text-sm border-b border-[color:var(--border)] ${statusOpen ? 'bg-green-900/40' : 'bg-red-900/40'}`}>
+        <div className="flex items-center gap-3">
+          {unit?.logoUrl && <img src={unit.logoUrl} className="w-7 h-7 rounded-full object-cover" alt="" />}
+          <span className="font-semibold">{unit?.name || 'Mesa Digital'}</span>
+          <span className={`px-2 py-0.5 rounded text-xs font-bold ${statusOpen ? 'bg-green-600' : 'bg-red-600'}`}>
+            ● {statusText}
+          </span>
+          {statusReason && <span className="text-xs text-gray-300">{statusReason}</span>}
+        </div>
+        <div className="text-xs text-gray-400">
+          {storeState?.schedule && (
+            <>Hoje: {storeState.schedule.openTime}–{storeState.schedule.closeTime}</>
+          )}
+        </div>
+      </div>
+    <div className="flex flex-1">
       <aside className="w-60 border-r border-[color:var(--border)] p-4 flex flex-col">
-        <div className="text-xl font-bold mb-6">🍔 Mesa Digital</div>
+        <div className="text-xl font-bold mb-6 flex items-center gap-2">
+          {unit?.logoUrl ? <img src={unit.logoUrl} className="w-8 h-8 rounded object-cover" alt="" /> : '🍔'}
+          <span className="truncate">{unit?.name || 'Mesa Digital'}</span>
+        </div>
         <nav className="flex flex-col gap-1">
           {navItems.map((n) => {
             const active = pathname === n.href || (n.href !== '/admin' && pathname.startsWith(n.href));
@@ -90,6 +150,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
       </aside>
       <main className="flex-1 p-6 overflow-x-auto">{children}</main>
+    </div>
     </div>
   );
 }

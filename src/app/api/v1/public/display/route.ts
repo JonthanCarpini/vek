@@ -10,7 +10,7 @@ export async function GET(_req: NextRequest) {
     });
     if (!unit) return ok({ unit: null, orders: [], featured: [] });
 
-    const [orders, featured] = await Promise.all([
+    const [orders, featured, playlist] = await Promise.all([
       prisma.order.findMany({
         where: {
           unitId: unit.id,
@@ -32,8 +32,12 @@ export async function GET(_req: NextRequest) {
           category: { select: { name: true } },
         },
       }),
+      prisma.displayItem.findMany({
+        where: { unitId: unit.id, active: true },
+        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+      }),
     ]);
 
-    return ok({ unit, orders, featured });
+    return ok({ unit, orders, featured, playlist });
   } catch (e) { return serverError(e); }
 }

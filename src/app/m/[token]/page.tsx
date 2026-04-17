@@ -30,6 +30,7 @@ export default function ClientPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [toast, setToast] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [readyAlert, setReadyAlert] = useState<any>(null);
 
   // Recupera sessão do localStorage
   useEffect(() => {
@@ -48,9 +49,27 @@ export default function ClientPage() {
       joinRooms([`session:${session.id}`]);
       const s = getSocket();
       const onStatus = (p: any) => { loadOrders(); showToast(`Pedido #${p.sequenceNumber ?? ''}: ${STATUS_LABEL[p.status] || p.status}`); };
+      const onReady = (p: any) => {
+        loadOrders();
+        setReadyAlert(p);
+        try {
+          // Beep curto usando Web Audio (funciona sem asset).
+          const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine'; osc.frequency.value = 880;
+          gain.gain.setValueAtTime(0.001, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime + 0.01);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+          osc.connect(gain); gain.connect(ctx.destination);
+          osc.start(); osc.stop(ctx.currentTime + 0.6);
+        } catch {}
+        if ('vibrate' in navigator) { try { navigator.vibrate([200, 80, 200]); } catch {} }
+      };
       s.on('order.status_changed', onStatus);
       s.on('order.updated', () => loadOrders());
-      return () => { s.off('order.status_changed', onStatus); s.off('order.updated'); };
+      s.on('order.ready', onReady);
+      return () => { s.off('order.status_changed', onStatus); s.off('order.updated'); s.off('order.ready', onReady); };
     }
     if (step === 'browse') {
       loadMenuPublic();
@@ -370,6 +389,21 @@ export default function ClientPage() {
 
       {toast && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 card px-4 py-2 text-sm z-50">{toast}</div>
+      )}
+
+      {readyAlert && (
+        <div className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-5" onClick={() => setReadyAlert(null)}>
+          <div className="bg-green-600 text-white rounded-3xl p-8 text-center max-w-md w-full animate-bounce" onClick={(e) => e.stopPropagation()}>
+            <div className="text-6xl mb-3">🔔</div>
+            <div className="text-3xl font-black mb-2">Pedido pronto!</div>
+            <div className="text-xl">
+              Seu pedido <b>#{readyAlert.sequenceNumber}</b> está pronto para retirada.
+            </div>
+            <button onClick={() => setReadyAlert(null)} className="mt-6 bg-white text-green-700 font-bold px-6 py-3 rounded-xl">
+              OK, vou retirar
+            </button>
+          </div>
+        </div>
       )}
     </main>
   );

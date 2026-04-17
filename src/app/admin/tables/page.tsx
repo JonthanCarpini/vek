@@ -11,12 +11,14 @@ const STATUS_LABEL: Record<string, string> = {
 const STATUS_COLOR: Record<string, string> = {
   free: 'badge-ok', occupied: 'badge-warn', reserved: 'badge-info', disabled: '',
 };
+const EMPTY_EDIT = { id: '', number: '', label: '', capacity: 4 };
 
 export default function Tables() {
   const [tables, setTables] = useState<any[]>([]);
   const [form, setForm] = useState({ number: '', label: '', capacity: 4 });
   const [qr, setQr] = useState<QRState | null>(null);
   const [copyMsg, setCopyMsg] = useState('');
+  const [edit, setEdit] = useState<any>(null);
 
   useEffect(() => { load(); }, []);
   async function load() { try { const d = await apiFetch('/api/v1/admin/tables'); setTables(d.tables); } catch {} }
@@ -29,6 +31,31 @@ export default function Tables() {
         body: JSON.stringify({ number: Number(form.number), label: form.label || null, capacity: Number(form.capacity) }),
       });
       setForm({ number: '', label: '', capacity: 4 }); load();
+    } catch (e: any) { alert(e.message); }
+  }
+
+  async function saveEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!edit) return;
+    try {
+      await apiFetch(`/api/v1/admin/tables/${edit.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          number: Number(edit.number),
+          label: edit.label || null,
+          capacity: Number(edit.capacity),
+        }),
+      });
+      setEdit(null); load();
+    } catch (e: any) { alert(e.message); }
+  }
+
+  async function remove(t: any) {
+    if (!confirm(`Excluir mesa ${t.number}? Se houver histórico, ela será apenas desabilitada.`)) return;
+    try {
+      const r = await apiFetch(`/api/v1/admin/tables/${t.id}`, { method: 'DELETE' });
+      if (r.disabled) alert('Mesa possui histórico e foi desabilitada ao invés de excluída.');
+      load();
     } catch (e: any) { alert(e.message); }
   }
 
@@ -54,7 +81,6 @@ export default function Tables() {
       setCopyMsg('Link copiado!');
       setTimeout(() => setCopyMsg(''), 2000);
     } catch {
-      // Fallback
       const ta = document.createElement('textarea');
       ta.value = qr.link; document.body.appendChild(ta); ta.select();
       try { document.execCommand('copy'); setCopyMsg('Link copiado!'); } catch { setCopyMsg('Copie manualmente'); }
@@ -93,7 +119,8 @@ export default function Tables() {
                 </div>
               )}
               <div className="flex gap-1 mt-3 flex-wrap">
-                <button onClick={() => openQR(t)} className="btn btn-ghost text-xs px-2 flex-1">QR Code</button>
+                <button onClick={() => openQR(t)} className="btn btn-ghost text-xs px-2">QR</button>
+                <button onClick={() => setEdit({ id: t.id, number: t.number, label: t.label || '', capacity: t.capacity })} className="btn btn-ghost text-xs px-2">Editar</button>
                 {isOccupied && (
                   <button onClick={() => setStatus(t.id, 'free', 'Desocupar mesa? A sessão ativa será fechada.')}
                     className="btn btn-ghost text-xs px-2 text-yellow-400">Desocupar</button>
@@ -109,11 +136,30 @@ export default function Tables() {
                 ) : (
                   <button onClick={() => setStatus(t.id, 'disabled', 'Desabilitar mesa?')} className="btn btn-ghost text-xs px-2 text-red-400">Desabilitar</button>
                 )}
+                <button onClick={() => remove(t)} className="btn btn-ghost text-xs px-2 text-red-500">Excluir</button>
               </div>
             </div>
           );
         })}
       </div>
+
+      {edit && (
+        <div className="fixed inset-0 bg-black/70 z-40 flex items-center justify-center p-4" onClick={() => setEdit(null)}>
+          <form onSubmit={saveEdit} className="card p-5 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="text-lg font-bold mb-4">Editar mesa</div>
+            <label className="label">Número</label>
+            <input type="number" className="input mb-3" value={edit.number} onChange={(e) => setEdit({ ...edit, number: e.target.value })} required />
+            <label className="label">Etiqueta</label>
+            <input className="input mb-3" value={edit.label} onChange={(e) => setEdit({ ...edit, label: e.target.value })} placeholder="ex: Varanda, VIP" />
+            <label className="label">Capacidade</label>
+            <input type="number" className="input mb-4" value={edit.capacity} onChange={(e) => setEdit({ ...edit, capacity: e.target.value })} />
+            <div className="flex gap-2">
+              <button className="btn btn-primary flex-1">Salvar</button>
+              <button type="button" onClick={() => setEdit(null)} className="btn btn-ghost">Cancelar</button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {qr && (
         <div className="fixed inset-0 bg-black/70 z-40 flex items-center justify-center p-4" onClick={() => setQr(null)}>
