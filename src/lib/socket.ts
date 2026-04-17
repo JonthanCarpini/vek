@@ -15,6 +15,8 @@ export const SocketEvents = {
   CALL_CREATED: 'call.created',
   CALL_ATTENDED: 'call.attended',
   SESSION_CLOSED: 'session.closed',
+  ORDER_READY: 'order.ready',
+  STORE_STATE_CHANGED: 'store.state_changed',
   METRICS_TICK: 'metrics.tick',
 } as const;
 

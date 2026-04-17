@@ -34,6 +34,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     emitToSession(order.sessionId, SocketEvents.ORDER_STATUS_CHANGED, {
       orderId: order.id, status: order.status, at: now,
     });
+    if (status === 'ready') {
+      emitToSession(order.sessionId, SocketEvents.ORDER_READY, {
+        orderId: order.id,
+        sequenceNumber: order.sequenceNumber,
+        tableNumber: order.table?.number,
+        readyAt: now,
+      });
+    }
 
     return ok({ order });
   } catch (e) { return serverError(e); }

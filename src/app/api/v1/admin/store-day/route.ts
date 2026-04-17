@@ -3,7 +3,8 @@ import { prisma } from '@/lib/prisma';
 import { ok, fail, parseBody, serverError } from '@/lib/api';
 import { requireStaff, ROLES } from '@/lib/guard';
 import { openStoreDaySchema } from '@/lib/validators';
-import { getCurrentStoreDay } from '@/lib/store';
+import { getCurrentStoreDay, invalidateStoreStateCache } from '@/lib/store';
+import { emitToUnit, SocketEvents } from '@/lib/socket';
 
 export async function GET(req: NextRequest) {
   try {
@@ -37,6 +38,8 @@ export async function POST(req: NextRequest) {
         notes: p.data.notes,
       },
     });
+    invalidateStoreStateCache(g.staff.unitId);
+    emitToUnit(g.staff.unitId, SocketEvents.STORE_STATE_CHANGED, { reason: 'day_opened' });
     return ok({ day });
   } catch (e) { return serverError(e); }
 }

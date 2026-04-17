@@ -28,6 +28,15 @@ model Unit {
   timezone   String   @default("America/Sao_Paulo")
   serviceFee Decimal  @default(0.10) @db.Decimal(5, 4)
   active     Boolean  @default(true)
+  // Métodos de pagamento habilitados (CSV: cash,credit,debit,pix,voucher)
+  paymentMethods String @default("cash,credit,debit,pix")
+  // Gateway online
+  onlinePaymentEnabled Boolean @default(false)
+  onlinePaymentProvider String? // "mercadopago" | "asaas"
+  mpAccessToken        String? @db.Text
+  mpPublicKey          String?
+  asaasApiKey          String? @db.Text
+  asaasWebhookToken    String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -43,6 +52,8 @@ model Unit {
   businessHours BusinessHours[]
   overrides     StoreOverride[]
   ingredients   Ingredient[]
+  displayItems  DisplayItem[]
+  customers     Customer[]
 
   @@index([tenantId])
 }
@@ -88,6 +99,7 @@ model TableSession {
   id            String    @id @default(cuid())
   tableId       String
   unitId        String
+  customerId    String?
   customerName  String
   customerPhone String
   status        String    @default("active") // active | closing | closed | cancelled
@@ -95,14 +107,16 @@ model TableSession {
   closedAt      DateTime?
   totalAmount   Decimal   @default(0) @db.Decimal(12, 2)
 
-  table  TableEntity @relation(fields: [tableId], references: [id])
-  unit   Unit        @relation(fields: [unitId], references: [id])
-  orders Order[]
-  calls  Call[]
+  table    TableEntity @relation(fields: [tableId], references: [id])
+  unit     Unit        @relation(fields: [unitId], references: [id])
+  customer Customer?   @relation(fields: [customerId], references: [id])
+  orders   Order[]
+  calls    Call[]
   payments SessionPayment[]
 
   @@index([tableId, status])
   @@index([unitId, status])
+  @@index([customerId])
 }
 
 model SessionPayment {
@@ -314,6 +328,45 @@ model Call {
   unit    Unit         @relation(fields: [unitId], references: [id])
 
   @@index([unitId, status, createdAt])
+}
+
+model Customer {
+  id           String   @id @default(cuid())
+  unitId       String
+  name         String
+  phone        String
+  email        String?
+  notes        String?  @db.Text
+  firstSeenAt  DateTime @default(now())
+  lastSeenAt   DateTime @default(now())
+  totalSpent   Decimal  @default(0) @db.Decimal(12, 2)
+  totalOrders  Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  unit     Unit           @relation(fields: [unitId], references: [id])
+  sessions TableSession[]
+
+  @@unique([unitId, phone])
+  @@index([unitId, name])
+}
+
+model DisplayItem {
+  id          String   @id @default(cuid())
+  unitId      String
+  type        String   // "image" | "video"
+  url         String
+  durationSec Int      @default(8) // usado para imagens
+  sortOrder   Int      @default(0)
+  active      Boolean  @default(true)
+  title       String?
+  subtitle    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  unit Unit @relation(fields: [unitId], references: [id])
+
+  @@index([unitId, active, sortOrder])
 }
 
 model AuditLog {

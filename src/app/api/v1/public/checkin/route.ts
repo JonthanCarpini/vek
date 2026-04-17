@@ -19,6 +19,13 @@ export async function POST(req: NextRequest) {
     const state = await getStoreState(table.unitId);
     if (!state.open) return fail(state.reason || 'Loja fechada no momento', 403);
 
+    // Upsert do cliente por (unitId, phone) para histórico.
+    const customer = await prisma.customer.upsert({
+      where: { unitId_phone: { unitId: table.unitId, phone } },
+      update: { name, lastSeenAt: new Date() },
+      create: { unitId: table.unitId, name, phone },
+    });
+
     // Reutiliza sessão ativa ou cria nova
     let session = await prisma.tableSession.findFirst({
       where: { tableId: table.id, status: 'active' },
@@ -30,6 +37,7 @@ export async function POST(req: NextRequest) {
         data: {
           tableId: table.id,
           unitId: table.unitId,
+          customerId: customer.id,
           customerName: name,
           customerPhone: phone,
           status: 'active',
@@ -38,6 +46,12 @@ export async function POST(req: NextRequest) {
       await prisma.tableEntity.update({
         where: { id: table.id },
         data: { status: 'occupied' },
+      });
+    } else if (!session.customerId) {
+      // Sessão legada sem customerId: associa agora.
+      await prisma.tableSession.update({
+        where: { id: session.id },
+        data: { customerId: customer.id },
       });
     }
 

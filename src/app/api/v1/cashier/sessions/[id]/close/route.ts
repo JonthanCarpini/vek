@@ -67,6 +67,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     });
     await prisma.tableEntity.update({ where: { id: session.tableId }, data: { status: 'free' } });
 
+    // Atualiza estatísticas do cliente (se vinculado)
+    if (session.customerId) {
+      await prisma.customer.update({
+        where: { id: session.customerId },
+        data: {
+          totalSpent: { increment: subtotal },
+          totalOrders: { increment: session.orders.length },
+          lastSeenAt: new Date(),
+        },
+      });
+    }
+
     emitToSession(id, SocketEvents.SESSION_CLOSED, { sessionId: id });
     emitToDashboard(session.unitId, SocketEvents.SESSION_CLOSED, { sessionId: id });
 

@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma';
 import { ok, fail, parseBody, serverError } from '@/lib/api';
 import { requireStaff, ROLES } from '@/lib/guard';
 import { businessHoursSchema } from '@/lib/validators';
+import { invalidateStoreStateCache } from '@/lib/store';
+import { emitToUnit, SocketEvents } from '@/lib/socket';
 
 export async function GET(req: NextRequest) {
   try {
@@ -33,6 +35,8 @@ export async function PUT(req: NextRequest) {
       }),
     ]);
     const hours = await prisma.businessHours.findMany({ where: { unitId }, orderBy: { weekday: 'asc' } });
+    invalidateStoreStateCache(unitId);
+    emitToUnit(unitId, SocketEvents.STORE_STATE_CHANGED, { reason: 'hours_changed' });
     return ok({ hours });
   } catch (e) { return serverError(e); }
 }

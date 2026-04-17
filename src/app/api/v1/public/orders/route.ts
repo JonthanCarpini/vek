@@ -29,8 +29,37 @@ export async function POST(req: NextRequest) {
     const productIds = parsed.data.items.map((i) => i.productId);
     const products = await prisma.product.findMany({
       where: { id: { in: productIds }, unitId: s.uid, active: true, available: true },
+      include: {
+        ingredients: {
+          where: { optional: false },
+          include: { ingredient: true },
+        },
+      },
     });
     if (products.length !== productIds.length) return fail('Produto indisponível', 409);
+
+    // Verifica se há estoque suficiente de ingredientes não-opcionais.
+    // Agrega necessidades totais por ingrediente.
+    const needed = new Map<string, { name: string; qty: number; stock: number; unit: string }>();
+    for (const item of parsed.data.items) {
+      const p = products.find((x: any) => x.id === item.productId)!;
+      for (const pi of (p as any).ingredients || []) {
+        const total = Number(pi.quantity) * item.quantity;
+        const cur = needed.get(pi.ingredientId);
+        if (cur) cur.qty += total;
+        else needed.set(pi.ingredientId, {
+          name: pi.ingredient.name,
+          qty: total,
+          stock: Number(pi.ingredient.stock),
+          unit: pi.ingredient.unitOfMeasure,
+        });
+      }
+    }
+    for (const [, n] of needed) {
+      if (n.qty > n.stock) {
+        return fail(`Estoque insuficiente de "${n.name}" (necessário ${n.qty}${n.unit}, disponível ${n.stock}${n.unit})`, 409);
+      }
+    }
 
     const unit = await prisma.unit.findUnique({ where: { id: s.uid } });
     const serviceFeeRate = unit ? Number(unit.serviceFee) : 0;
@@ -64,24 +93,43 @@ export async function POST(req: NextRequest) {
     });
     const sequenceNumber = (last?.sequenceNumber || 0) + 1;
 
-    const order = await prisma.order.create({
-      data: {
-        sessionId: s.sid,
-        unitId: s.uid,
-        tableId: s.tid,
-        sequenceNumber,
-        status: 'received',
-        subtotal, serviceFee, total,
-        notes: parsed.data.notes || null,
-        items: { create: itemsData },
-      },
-      include: { items: true, table: true },
-    });
+    const order = await prisma.$transaction(async (tx: any) => {
+      const created = await tx.order.create({
+        data: {
+          sessionId: s.sid,
+          unitId: s.uid,
+          tableId: s.tid,
+          sequenceNumber,
+          status: 'received',
+          subtotal, serviceFee, total,
+          notes: parsed.data.notes || null,
+          items: { create: itemsData },
+        },
+        include: { items: true, table: true },
+      });
 
-    // Atualiza total da sessão
-    await prisma.tableSession.update({
-      where: { id: s.sid },
-      data: { totalAmount: { increment: total } },
+      // Deduz estoque dos ingredientes não-opcionais (dentro da mesma transação).
+      for (const [ingId, n] of needed) {
+        await tx.ingredient.update({
+          where: { id: ingId },
+          data: { stock: { decrement: n.qty } },
+        });
+        await tx.auditLog.create({
+          data: {
+            action: 'stock_deduct',
+            entity: 'Ingredient',
+            entityId: ingId,
+            diff: JSON.stringify({ orderId: created.id, qty: n.qty, reason: 'order_created' }),
+          },
+        });
+      }
+
+      // Atualiza total da sessão
+      await tx.tableSession.update({
+        where: { id: s.sid },
+        data: { totalAmount: { increment: total } },
+      });
+      return created;
     });
 
     const payload = serializeOrder(order);

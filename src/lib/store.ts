@@ -48,7 +48,24 @@ export type StoreState = {
   schedule?: { weekday: number; openTime: string; closeTime: string } | null;
 };
 
+// Cache em memória para reduzir carga no checkin (TTL 10s por unidade).
+const STORE_STATE_TTL_MS = 10_000;
+const storeStateCache = new Map<string, { at: number; state: StoreState }>();
+
+export function invalidateStoreStateCache(unitId?: string) {
+  if (unitId) storeStateCache.delete(unitId);
+  else storeStateCache.clear();
+}
+
 export async function getStoreState(unitId: string, tz?: string): Promise<StoreState> {
+  const cached = storeStateCache.get(unitId);
+  if (cached && Date.now() - cached.at < STORE_STATE_TTL_MS) return cached.state;
+  const state = await computeStoreState(unitId, tz);
+  storeStateCache.set(unitId, { at: Date.now(), state });
+  return state;
+}
+
+async function computeStoreState(unitId: string, tz?: string): Promise<StoreState> {
   const [day, override, hours, unit] = await Promise.all([
     getCurrentStoreDay(unitId),
     getActiveOverride(unitId),
