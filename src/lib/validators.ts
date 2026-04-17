@@ -74,6 +74,49 @@ export const itemStatusSchema = z.object({
 
 export const callAttendSchema = z.object({}).optional();
 
+// Fase 2
+export const openStoreDaySchema = z.object({
+  openingCash: z.number().min(0).default(0),
+  notes: z.string().max(500).optional(),
+});
+export const closeStoreDaySchema = z.object({
+  closingCash: z.number().min(0),
+  notes: z.string().max(500).optional(),
+});
+
+export const storeOverrideSchema = z.object({
+  type: z.enum(['open', 'closed']),
+  reason: z.string().min(2).max(200),
+  endsAt: z.string().datetime().optional().nullable(),
+});
+
+export const businessHourItem = z.object({
+  weekday: z.number().int().min(0).max(6),
+  openTime: z.string().regex(/^\d{2}:\d{2}$/),
+  closeTime: z.string().regex(/^\d{2}:\d{2}$/),
+  active: z.boolean().default(true),
+});
+export const businessHoursSchema = z.object({
+  hours: z.array(businessHourItem).max(7),
+});
+
+export const PAYMENT_METHODS = ['cash', 'credit', 'debit', 'pix', 'voucher', 'other'] as const;
+export const sessionPaymentSchema = z.object({
+  method: z.enum(PAYMENT_METHODS),
+  amount: z.number().positive(),
+  changeGiven: z.number().min(0).optional().default(0),
+  reference: z.string().max(80).optional().nullable(),
+  partLabel: z.string().max(40).optional().nullable(),
+  notes: z.string().max(300).optional().nullable(),
+});
+
+export const closeSessionSchema = z.object({
+  // Finaliza a sessão. Se amountsPaid já cobre o total, não precisa enviar nada.
+  // Se enviar payments aqui, eles serão criados antes de fechar.
+  payments: z.array(sessionPaymentSchema).optional().default([]),
+  force: z.boolean().optional().default(false), // ignora diferença
+});
+
 export const settingsSchema = z.object({
   name: z.string().min(1).max(120).optional(),
   address: z.string().max(200).optional().nullable(),

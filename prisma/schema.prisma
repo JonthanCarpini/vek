@@ -39,6 +39,9 @@ model Unit {
   orders     Order[]
   sessions   TableSession[]
   calls      Call[]
+  storeDays     StoreDay[]
+  businessHours BusinessHours[]
+  overrides     StoreOverride[]
 
   @@index([tenantId])
 }
@@ -95,9 +98,79 @@ model TableSession {
   unit   Unit        @relation(fields: [unitId], references: [id])
   orders Order[]
   calls  Call[]
+  payments SessionPayment[]
 
   @@index([tableId, status])
   @@index([unitId, status])
+}
+
+model SessionPayment {
+  id         String   @id @default(cuid())
+  sessionId  String
+  storeDayId String?
+  method     String   // cash | credit | debit | pix | voucher | other
+  amount     Decimal  @db.Decimal(12,2)
+  changeGiven Decimal @default(0) @db.Decimal(12,2)
+  reference  String?  // NSU, txid, etc
+  partLabel  String?  // "Pessoa 1", etc
+  notes      String?  @db.Text
+  createdByUserId String?
+  createdAt  DateTime @default(now())
+
+  session  TableSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  storeDay StoreDay?    @relation(fields: [storeDayId], references: [id])
+
+  @@index([sessionId])
+  @@index([storeDayId])
+}
+
+model StoreDay {
+  id              String    @id @default(cuid())
+  unitId          String
+  openedAt        DateTime  @default(now())
+  openedByUserId  String
+  closedAt        DateTime?
+  closedByUserId  String?
+  openingCash     Decimal   @default(0) @db.Decimal(12,2)
+  closingCash     Decimal?  @db.Decimal(12,2)
+  expectedCash    Decimal?  @db.Decimal(12,2)
+  cashDiff        Decimal?  @db.Decimal(12,2)
+  totalSales      Decimal?  @db.Decimal(12,2)
+  notes           String?   @db.Text
+  status          String    @default("open") // open | closed
+
+  unit     Unit             @relation(fields: [unitId], references: [id])
+  payments SessionPayment[]
+
+  @@index([unitId, status])
+  @@index([unitId, openedAt])
+}
+
+model BusinessHours {
+  id        String  @id @default(cuid())
+  unitId    String
+  weekday   Int     // 0..6 (dom..sáb)
+  openTime  String  // "HH:mm"
+  closeTime String  // "HH:mm"
+  active    Boolean @default(true)
+
+  unit Unit @relation(fields: [unitId], references: [id])
+
+  @@unique([unitId, weekday])
+}
+
+model StoreOverride {
+  id              String    @id @default(cuid())
+  unitId          String
+  type            String    // "open" | "closed"
+  reason          String
+  startsAt        DateTime  @default(now())
+  endsAt          DateTime?
+  createdByUserId String
+
+  unit Unit @relation(fields: [unitId], references: [id])
+
+  @@index([unitId, endsAt])
 }
 
 model Category {
