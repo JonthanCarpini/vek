@@ -55,44 +55,88 @@ export default function ClientPage() {
         const d = JSON.parse(saved);
         setToken(d.token);
         setSession(d.session);
-        setStep('menu');
-      } catch {}
+        // Não definimos o step como 'menu' imediatamente. 
+        // Vamos validar primeiro no useEffect abaixo.
+      } catch {
+        localStorage.removeItem(`md:session:${qrToken}`);
+      }
     }
     loadUnit();
   }, [qrToken]);
 
   useEffect(() => {
-    if (step === 'menu' && token) {
-      loadAll();
-      joinRooms([`session:${session.id}`]);
-      const s = getSocket();
-      s.on('order.status_changed', (p) => {
-        loadOrders();
-        showToast(`Pedido #${p.sequenceNumber}: ${STATUS_LABEL[p.status] || p.status}`);
-      });
-      s.on('order.ready', (p) => {
-        loadOrders();
-        setReadyAlert(p);
-        playBeep();
-        if ('vibrate' in navigator) navigator.vibrate([200, 100, 200]);
-      });
-      s.on('call.attended', () => {
-        loadCalls();
-        showToast('Chamada atendida!');
-      });
+    if (token) {
+      validateAndLoad();
+    } else if (step === 'intro' || step === 'browse') {
+      loadMenuPublic();
+    }
+  }, [token, qrToken]);
 
-      // Polling de fallback para chamadas
+  async function validateAndLoad() {
+    setLoading(true);
+    try {
+      // Tentamos carregar as ordens. Se falhar com 401/403, a sessão caiu.
+      const r = await fetch('/api/v1/public/orders', { headers: { 'x-session-token': token } });
+      if (r.status === 401 || r.status === 403) {
+        throw new Error('Sessão expirada');
+      }
+      const j = await r.json();
+      if (r.ok) {
+        setOrders(j.data.orders);
+        setStep('menu'); // Só agora entramos no menu
+        loadMenu();
+        loadCalls();
+        setupSocket();
+      } else {
+        throw new Error();
+      }
+    } catch {
+      handleLogout();
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleLogout() {
+    localStorage.removeItem(`md:session:${qrToken}`);
+    setToken('');
+    setSession(null);
+    setStep('intro');
+    setCart([]);
+  }
+
+  function setupSocket() {
+    if (!session?.id) return;
+    joinRooms([`session:${session.id}`]);
+    const s = getSocket();
+    s.on('order.status_changed', (p) => {
+      loadOrders();
+      showToast(`Pedido #${p.sequenceNumber}: ${STATUS_LABEL[p.status] || p.status}`);
+    });
+    s.on('order.ready', (p) => {
+      loadOrders();
+      setReadyAlert(p);
+      playBeep();
+      if ('vibrate' in navigator) navigator.vibrate([200, 100, 200]);
+    });
+    s.on('call.attended', () => {
+      loadCalls();
+      showToast('Chamada atendida!');
+    });
+  }
+
+  useEffect(() => {
+    if (step === 'menu') {
       const t = setInterval(loadCalls, 30000);
       return () => {
+        const s = getSocket();
         s.off('order.status_changed');
         s.off('order.ready');
         s.off('call.attended');
         clearInterval(t);
       };
-    } else if (step === 'browse' || step === 'intro') {
-      loadMenuPublic();
     }
-  }, [step, token]);
+  }, [step]);
 
   async function loadUnit() {
     try {
@@ -118,18 +162,21 @@ export default function ClientPage() {
 
   async function loadMenu() {
     const r = await fetch('/api/v1/public/menu', { headers: { 'x-session-token': token } });
+    if (r.status === 401 || r.status === 403) return handleLogout();
     const j = await r.json();
     if (r.ok) setCategories(j.data.categories);
   }
 
   async function loadOrders() {
     const r = await fetch('/api/v1/public/orders', { headers: { 'x-session-token': token } });
+    if (r.status === 401 || r.status === 403) return handleLogout();
     const j = await r.json();
     if (r.ok) setOrders(j.data.orders);
   }
 
   async function loadCalls() {
     const r = await fetch('/api/v1/public/calls', { headers: { 'x-session-token': token } });
+    if (r.status === 401 || r.status === 403) return handleLogout();
     const j = await r.json();
     if (r.ok) setCalls(j.data.calls);
   }
