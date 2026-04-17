@@ -183,7 +183,7 @@ export function WaiterTableModal({ sessionId, onClose }: { sessionId: string; on
                 orders={orders}
                 onCancelItem={cancelItem}
                 onCancelOrder={cancelFullOrder}
-                onAddToOrder={(id) => { setTargetOrderId(id); setTab('new'); }}
+                onAddToOrder={(id: string) => { setTargetOrderId(id); setTab('new'); }}
                 busy={busy}
               />
             )}
