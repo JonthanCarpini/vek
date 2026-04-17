@@ -44,6 +44,7 @@ export default function SettingsPage() {
       address: unit.address,
       phone: unit.phone,
       whatsapp: unit.whatsapp,
+      instagram: unit.instagram,
       logoUrl: unit.logoUrl,
       primaryColor: unit.primaryColor,
       serviceFee: Number(unit.serviceFee),
@@ -122,6 +123,10 @@ export default function SettingsPage() {
             <div>
               <label className="label">WhatsApp</label>
               <input className="input" value={unit.whatsapp || ''} onChange={(e) => setUnit({ ...unit, whatsapp: e.target.value })} placeholder="5511999990000" />
+            </div>
+            <div>
+              <label className="label">Instagram (apenas o @)</label>
+              <input className="input" value={unit.instagram || ''} onChange={(e) => setUnit({ ...unit, instagram: e.target.value })} placeholder="@restaurante" />
             </div>
             <div>
               <label className="label">Taxa de serviço (0 a 1, ex: 0.10 = 10%)</label>

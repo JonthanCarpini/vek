@@ -49,14 +49,18 @@ export default function ClientPage() {
 
   // -- Init & Data Loading --
   useEffect(() => {
+    // Tenta carregar dados salvos do cliente para pré-preenchimento
+    const savedName = localStorage.getItem('md:customer:name');
+    const savedPhone = localStorage.getItem('md:customer:phone');
+    if (savedName) setName(savedName);
+    if (savedPhone) setPhone(savedPhone);
+
     const saved = localStorage.getItem(`md:session:${qrToken}`);
     if (saved) {
       try {
         const d = JSON.parse(saved);
         setToken(d.token);
         setSession(d.session);
-        // Não definimos o step como 'menu' imediatamente. 
-        // Vamos validar primeiro no useEffect abaixo.
       } catch {
         localStorage.removeItem(`md:session:${qrToken}`);
       }
@@ -103,6 +107,12 @@ export default function ClientPage() {
     setSession(null);
     setStep('intro');
     setCart([]);
+  }
+
+  function handleExitTable() {
+    // Se não houver pedidos, apenas faz logout e volta para o início (index)
+    localStorage.removeItem(`md:session:${qrToken}`);
+    window.location.href = '/';
   }
 
   function setupSocket() {
@@ -425,7 +435,12 @@ export default function ClientPage() {
             <span className="text-2xl">🍔</span>
           )}
           <div>
-            <div className="text-xs text-gray-500 leading-none">Mesa {session?.tableNumber}</div>
+            <div className="text-xs text-gray-500 leading-none flex items-center gap-2">
+              Mesa {session?.tableNumber}
+              {activeOrders.length === 0 && (
+                <button onClick={handleExitTable} className="text-red-500 hover:text-red-400 font-bold uppercase text-[9px] bg-red-500/10 px-1.5 py-0.5 rounded">Sair da Mesa</button>
+              )}
+            </div>
             <div className="font-bold text-sm truncate max-w-[120px]">{session?.customerName}</div>
           </div>
         </div>

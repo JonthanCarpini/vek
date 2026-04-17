@@ -23,6 +23,7 @@ model Unit {
   address    String?
   phone      String?
   whatsapp   String?
+  instagram  String?
   logoUrl    String?
   primaryColor String? @default("#ea580c")
   timezone   String   @default("America/Sao_Paulo")

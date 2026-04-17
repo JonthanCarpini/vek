@@ -150,6 +150,7 @@ export const settingsSchema = z.object({
   address: z.string().max(200).optional().nullable(),
   phone: z.string().max(30).optional().nullable(),
   whatsapp: z.string().max(30).optional().nullable(),
+  instagram: z.string().max(30).optional().nullable(),
   logoUrl: z.string().max(500).optional().nullable(),
   primaryColor: z.string().max(16).optional().nullable(),
   serviceFee: z.number().min(0).max(1).optional(),

@@ -17,7 +17,7 @@ export default function Home() {
     fetch('/api/v1/public/unit')
       .then(r => r.json())
       .then(j => {
-        if (j.data) setUnit(j.data);
+        if (j.data?.unit) setUnit(j.data.unit);
       })
       .catch(() => {});
 
@@ -53,8 +53,13 @@ export default function Home() {
     try {
       if (text.includes('/m/')) {
         const token = text.split('/m/')[1]?.split('?')[0];
-        if (token) router.push(`/m/${token}`);
-        return;
+        if (token) {
+          // Salva nome/telefone se houver no localstorage para pré-preenchimento
+          const savedName = localStorage.getItem('md:customer:name');
+          const savedPhone = localStorage.getItem('md:customer:phone');
+          router.push(`/m/${token}${savedName ? `?name=${encodeURIComponent(savedName)}` : ''}${savedPhone ? `&phone=${encodeURIComponent(savedPhone)}` : ''}`);
+          return;
+        }
       }
     } catch {}
     router.push(`/m/${text}`);
@@ -84,10 +89,17 @@ export default function Home() {
           <h1 className="text-5xl md:text-6xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-b from-white to-gray-400">
             {unit?.name || 'Espetinho do Chef'}
           </h1>
-          <p className="text-gray-400 text-lg max-w-md mx-auto leading-relaxed">
-            Bem-vindo à nossa mesa digital. <br/>
-            Escaneie o código da sua mesa para começar.
-          </p>
+          <div className="flex flex-col items-center gap-2">
+            <p className="text-gray-400 text-lg max-w-md mx-auto leading-relaxed">
+              Bem-vindo à nossa mesa digital. <br/>
+              Escaneie o código da sua mesa para começar.
+            </p>
+            {unit && (
+              <div className={`px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${unit.isOpen ? 'bg-green-500/20 text-green-500 border border-green-500/30' : 'bg-red-500/20 text-red-500 border border-red-500/30'}`}>
+                {unit.isOpen ? '● Aberto Agora' : '○ Fechado'}
+              </div>
+            )}
+          </div>
         </div>
       </section>
 
@@ -180,7 +192,13 @@ export default function Home() {
             </div>
             <div>
               <div className="font-bold text-gray-200">Horário</div>
-              <p className="text-sm text-gray-500 leading-snug">Terça a Domingo: 18:00 às 00:00</p>
+              {unit?.currentSchedule ? (
+                <p className="text-sm text-gray-500 leading-snug">
+                  Hoje: {unit.currentSchedule.openTime} às {unit.currentSchedule.closeTime}
+                </p>
+              ) : (
+                <p className="text-sm text-gray-500 leading-snug">Terça a Domingo: 18:00 às 00:00</p>
+              )}
             </div>
           </div>
         </div>
@@ -194,6 +212,7 @@ export default function Home() {
           )}
           {unit?.whatsapp && (
             <a href={`https://wa.me/55${unit.whatsapp.replace(/\D/g,'')}`} target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-full bg-gray-900 flex items-center justify-center text-gray-500 hover:text-orange-500 transition-colors border border-gray-800/50">
+              {/* @ts-ignore */}
               <Phone size={18} />
             </a>
           )}
