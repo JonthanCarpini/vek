@@ -5,12 +5,14 @@ import { apiFetch, loadStaff } from '@/lib/staff-client';
 import { getSocket, joinRooms } from '@/lib/socket-client';
 import { formatBRL } from '@/lib/format';
 import { CashierSessionModal } from '@/components/CashierSessionModal';
+import { CashierSummaryCard } from '@/components/CashierSummaryCard';
 
 export default function CashierPage() {
   const router = useRouter();
   const [staff, setStaff] = useState<any>(null);
   const [sessions, setSessions] = useState<any[]>([]);
   const [day, setDay] = useState<any>(null);
+  const [summary, setSummary] = useState<any>(null);
   const [openingCash, setOpeningCash] = useState('');
   const [closingCash, setClosingCash] = useState('');
   const [modal, setModal] = useState<string | null>(null);
@@ -23,9 +25,10 @@ export default function CashierPage() {
     setStaff(s);
     load();
     loadDay();
+    loadSummary();
     if (s.user.unitId) joinRooms([`unit:${s.user.unitId}:dashboard`]);
     const sock = getSocket();
-    const r = () => load();
+    const r = () => { load(); loadSummary(); };
     sock.on('order.created', r);
     sock.on('order.updated', r);
     sock.on('order.status_changed', r);
@@ -45,6 +48,10 @@ export default function CashierPage() {
   }
   async function loadDay() {
     try { const d = await apiFetch('/api/v1/admin/store-day'); setDay(d.current); } catch {}
+  }
+  async function loadSummary() {
+    try { const d = await apiFetch('/api/v1/admin/store-day/summary'); setSummary(d.summary); }
+    catch {}
   }
 
   async function openDay(e: React.FormEvent) {
@@ -122,6 +129,12 @@ export default function CashierPage() {
         {err && <div className="text-red-400 text-sm mt-2">{err}</div>}
       </section>
 
+      {day && summary && <CashierSummaryCard summary={summary} />}
+
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-lg font-semibold">Mesas abertas ({sessions.length})</h2>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
         {sessions.length === 0 && (
           <div className="col-span-full text-gray-500 text-center py-16 card p-8">
@@ -155,7 +168,7 @@ export default function CashierPage() {
         })}
       </div>
 
-      {modal && <CashierSessionModal sessionId={modal} onClose={() => { setModal(null); load(); }} />}
+      {modal && <CashierSessionModal sessionId={modal} onClose={() => { setModal(null); load(); loadSummary(); }} />}
     </main>
   );
 }

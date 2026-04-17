@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { apiFetch, loadStaff, clearStaff } from '@/lib/staff-client';
 import { getSocket, joinRooms } from '@/lib/socket-client';
 import { formatBRL } from '@/lib/format';
+import { WaiterTableModal } from '@/components/WaiterTableModal';
 
 const TYPE_LABEL: Record<string, string> = { waiter: '🙋 Garçom', bill: '💳 Conta', help: '❓ Ajuda' };
 const STATUS_LABEL: Record<string, string> = {
@@ -24,7 +25,7 @@ export default function WaiterPage() {
   const [tab, setTab] = useState<Tab>('tables');
   const [calls, setCalls] = useState<any[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
-  const [expand, setExpand] = useState<string | null>(null);
+  const [manageSession, setManageSession] = useState<string | null>(null);
 
   useEffect(() => {
     const s = loadStaff();
@@ -110,7 +111,6 @@ export default function WaiterPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
           {sessions.length === 0 && <div className="col-span-full text-center text-gray-500 py-16">Nenhuma mesa ocupada</div>}
           {sessions.map((s: any) => {
-            const isExpanded = expand === s.id;
             return (
               <div key={s.id} className={`card p-4 ${s.readyOrders > 0 ? 'border-green-500/50' : ''}`}>
                 <div className="flex justify-between items-start mb-2">
@@ -124,41 +124,35 @@ export default function WaiterPage() {
                   </div>
                 </div>
                 <div className="text-sm text-gray-300">{s.customerName}</div>
-                <div className="text-xs text-gray-500 mb-2">Aberta {elapsed(s.openedAt)} atrás · {s.orderCount} pedido(s) · {formatBRL(s.subtotal)}</div>
+                <div className="text-xs text-gray-500 mb-3">Aberta {elapsed(s.openedAt)} atrás · {s.orderCount} pedido(s) · {formatBRL(s.subtotal)}</div>
 
-                <button onClick={() => setExpand(isExpanded ? null : s.id)} className="text-xs text-brand-400 hover:underline mb-2">
-                  {isExpanded ? 'Ocultar pedidos' : 'Ver pedidos'}
-                </button>
-
-                {isExpanded && (
-                  <div className="space-y-2 border-t border-gray-800 pt-2">
-                    {s.orders.map((o: any) => (
-                      <div key={o.id} className="border border-gray-800 rounded p-2">
-                        <div className="flex justify-between items-center text-xs mb-1">
-                          <span className={`px-2 py-0.5 rounded text-white ${STATUS_COLOR[o.status] || 'bg-gray-700'}`}>
-                            #{o.sequenceNumber} · {STATUS_LABEL[o.status] || o.status}
-                          </span>
-                          <span className="text-gray-500">{elapsed(o.createdAt)}</span>
-                        </div>
-                        <div className="text-sm space-y-0.5">
-                          {o.items.map((i: any) => (
-                            <div key={i.id} className="flex justify-between">
-                              <span>{i.quantity}× {i.name}</span>
-                              <span className="text-gray-400">{formatBRL(Number(i.unitPrice) * i.quantity)}</span>
-                            </div>
-                          ))}
-                        </div>
-                        {o.status === 'ready' && (
-                          <button onClick={() => deliver(o.id)} className="btn btn-primary w-full mt-2 text-sm">Entregue ✓</button>
-                        )}
-                      </div>
+                {/* Atalhos de pedidos prontos para entregar */}
+                {s.orders?.filter((o: any) => o.status === 'ready').length > 0 && (
+                  <div className="space-y-1 mb-3">
+                    {s.orders.filter((o: any) => o.status === 'ready').map((o: any) => (
+                      <button key={o.id} onClick={() => deliver(o.id)}
+                        className="btn btn-primary w-full text-sm py-1.5">
+                        🔔 Entregar #{o.sequenceNumber} ({formatBRL(Number(o.total))})
+                      </button>
                     ))}
                   </div>
                 )}
+
+                <button onClick={() => setManageSession(s.id)}
+                  className="btn btn-ghost w-full text-sm border border-brand-500/30 text-brand-300 hover:bg-brand-500/10">
+                  ⚙️ Gerenciar mesa
+                </button>
               </div>
             );
           })}
         </div>
+      )}
+
+      {manageSession && (
+        <WaiterTableModal
+          sessionId={manageSession}
+          onClose={() => { setManageSession(null); loadAll(); }}
+        />
       )}
     </main>
   );

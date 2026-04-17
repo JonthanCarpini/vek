@@ -86,6 +86,11 @@ export default function Products() {
     setForm({ ...form, ingredients: [...form.ingredients, { ingredientId: available[0].id, quantity: 1, optional: false }] });
   }
   function updateIngredient(idx: number, patch: any) {
+    // Se trocar o ingredientId para um que ja esta em outra linha, rejeita.
+    if (patch.ingredientId) {
+      const dup = form.ingredients.some((x: any, i: number) => i !== idx && x.ingredientId === patch.ingredientId);
+      if (dup) { alert('Este ingrediente ja foi adicionado. Ajuste a quantidade na linha existente.'); return; }
+    }
     setForm({ ...form, ingredients: form.ingredients.map((x: any, i: number) => i === idx ? { ...x, ...patch } : x) });
   }
   function removeIngredient(idx: number) {
@@ -249,37 +254,80 @@ export default function Products() {
                     />
                   )}
 
-                  <div className="border border-gray-800 rounded-lg p-3">
-                    <div className="flex justify-between items-center mb-2">
-                      <label className="label !mb-0">🥬 Ingredientes</label>
+                  <div className="border border-[color:var(--border)] rounded-xl p-4 bg-[#0f0f17]">
+                    <div className="flex justify-between items-center mb-3">
+                      <div>
+                        <div className="font-semibold flex items-center gap-2">🥬 Ingredientes</div>
+                        <div className="text-xs text-gray-500">Usados para controle de estoque automatico</div>
+                      </div>
                       <button type="button" onClick={addIngredient}
                         disabled={ingredients.length === 0 || form.ingredients.length >= ingredients.length}
-                        className="btn btn-ghost text-xs">+ Adicionar</button>
+                        className="btn btn-primary text-xs whitespace-nowrap">+ Adicionar</button>
                     </div>
-                    {ingredients.length === 0 && <div className="text-xs text-gray-500">Nenhum ingrediente cadastrado. Cadastre no menu "Ingredientes".</div>}
-                    {form.ingredients.length === 0 && ingredients.length > 0 && <div className="text-xs text-gray-500">Sem ingredientes vinculados.</div>}
+                    {ingredients.length === 0 && (
+                      <div className="text-xs text-amber-400 bg-amber-600/10 border border-amber-600/30 rounded-lg p-2">
+                        Nenhum ingrediente cadastrado ainda. Cadastre no menu <b>"Ingredientes"</b> antes de vincular.
+                      </div>
+                    )}
+                    {form.ingredients.length === 0 && ingredients.length > 0 && (
+                      <div className="text-xs text-gray-500 italic py-2">Sem ingredientes vinculados.</div>
+                    )}
                     <div className="space-y-2">
                       {form.ingredients.map((it: any, idx: number) => {
                         const ing = ingredients.find((i) => i.id === it.ingredientId);
+                        // Opcoes disponiveis: este ingrediente + os que ainda nao foram usados em outras linhas
+                        const availableOptions = ingredients.filter((i) =>
+                          i.id === it.ingredientId ||
+                          !form.ingredients.some((x: any, xi: number) => xi !== idx && x.ingredientId === i.id),
+                        );
                         return (
-                          <div key={idx} className="flex gap-2 items-center">
-                            <select className="input flex-1 min-w-0" value={it.ingredientId}
-                              onChange={(e) => updateIngredient(idx, { ingredientId: e.target.value })}>
-                              {ingredients.map((i) => <option key={i.id} value={i.id}>{i.name} ({i.unitOfMeasure})</option>)}
-                            </select>
-                            <input type="number" step="0.001" className="input w-20" value={it.quantity}
-                              onChange={(e) => updateIngredient(idx, { quantity: e.target.value })} />
-                            <span className="text-xs text-gray-500 w-8">{ing?.unitOfMeasure || ''}</span>
-                            <label className="flex items-center gap-1 text-xs whitespace-nowrap">
-                              <input type="checkbox" checked={it.optional}
-                                onChange={(e) => updateIngredient(idx, { optional: e.target.checked })} />
-                              opc.
-                            </label>
-                            <button type="button" onClick={() => removeIngredient(idx)} className="text-red-400 text-sm">✕</button>
+                          <div key={idx} className="bg-[#1f1f2b] rounded-lg p-2 space-y-2">
+                            <div className="grid grid-cols-[1fr_auto] gap-2 items-center">
+                              <select
+                                className="input text-sm"
+                                value={it.ingredientId || ''}
+                                onChange={(e) => updateIngredient(idx, { ingredientId: e.target.value })}
+                              >
+                                {!it.ingredientId && <option value="">Selecione...</option>}
+                                {availableOptions.map((i) => (
+                                  <option key={i.id} value={i.id}>
+                                    {i.name} ({i.unitOfMeasure}) · estoque: {Number(i.stock || 0)}
+                                  </option>
+                                ))}
+                              </select>
+                              <button type="button" onClick={() => removeIngredient(idx)}
+                                className="w-9 h-9 rounded-lg bg-red-600/20 text-red-300 hover:bg-red-600/40 transition" aria-label="Remover">
+                                ✕
+                              </button>
+                            </div>
+                            <div className="grid grid-cols-[auto_1fr_auto] gap-2 items-center">
+                              <span className="text-xs text-gray-400">Qtd</span>
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="number"
+                                  step="0.001"
+                                  min="0.001"
+                                  className="input text-sm flex-1"
+                                  value={it.quantity}
+                                  onChange={(e) => updateIngredient(idx, { quantity: e.target.value })}
+                                />
+                                <span className="text-xs text-gray-500 w-10">{ing?.unitOfMeasure || '-'}</span>
+                              </div>
+                              <label className="flex items-center gap-1 text-xs whitespace-nowrap cursor-pointer">
+                                <input type="checkbox" checked={it.optional}
+                                  onChange={(e) => updateIngredient(idx, { optional: e.target.checked })} />
+                                Opcional
+                              </label>
+                            </div>
                           </div>
                         );
                       })}
                     </div>
+                    {form.ingredients.length > 0 && (
+                      <div className="text-[11px] text-gray-500 mt-2">
+                        Itens opcionais nao deduzem estoque automaticamente.
+                      </div>
+                    )}
                   </div>
                 </section>
               </div>

@@ -47,12 +47,22 @@ export async function POST(req: NextRequest) {
         where: { id: table.id },
         data: { status: 'occupied' },
       });
-    } else if (!session.customerId) {
-      // Sessão legada sem customerId: associa agora.
-      await prisma.tableSession.update({
-        where: { id: session.id },
-        data: { customerId: customer.id },
-      });
+    } else {
+      // Mesa ja tem sessao ativa. Permite reentrada apenas se for o mesmo telefone
+      // (ex.: recarregou o app, trocou de celular). Bloqueia outros clientes.
+      const samePhone = normalizePhone(session.customerPhone) === normalizePhone(phone);
+      if (!samePhone) {
+        return fail(
+          `Esta mesa ja esta aberta por ${session.customerName || 'outro cliente'}. Peca ao responsavel para compartilhar o link desta mesa.`,
+          409,
+        );
+      }
+      if (!session.customerId) {
+        await prisma.tableSession.update({
+          where: { id: session.id },
+          data: { customerId: customer.id },
+        });
+      }
     }
 
     const token = signSession({
@@ -75,4 +85,8 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     return serverError(e);
   }
+}
+
+function normalizePhone(p: string | null | undefined): string {
+  return (p || '').replace(/\D+/g, '');
 }

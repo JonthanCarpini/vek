@@ -16,10 +16,20 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       const updated = await tx.product.update({ where: { id }, data: rest });
       if (Array.isArray(ingredients)) {
         await tx.productIngredient.deleteMany({ where: { productId: id } });
-        if (ingredients.length > 0) {
+        // Deduplica por ingredientId (mantém ultima ocorrencia somando quantidades)
+        const dedup = new Map<string, { quantity: number; optional: boolean }>();
+        for (const i of ingredients) {
+          if (!i.ingredientId) continue;
+          const prev = dedup.get(i.ingredientId);
+          const qty = Number(i.quantity) || 0;
+          if (qty <= 0) continue;
+          if (prev) dedup.set(i.ingredientId, { quantity: prev.quantity + qty, optional: !!i.optional });
+          else dedup.set(i.ingredientId, { quantity: qty, optional: !!i.optional });
+        }
+        if (dedup.size > 0) {
           await tx.productIngredient.createMany({
-            data: ingredients.map((i: any) => ({
-              productId: id, ingredientId: i.ingredientId, quantity: i.quantity, optional: !!i.optional,
+            data: Array.from(dedup.entries()).map(([ingredientId, v]) => ({
+              productId: id, ingredientId, quantity: v.quantity, optional: v.optional,
             })),
           });
         }
