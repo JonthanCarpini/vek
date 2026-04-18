@@ -238,15 +238,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 {group.items.map((n) => {
                   const active = pathname === n.href || (n.href !== '/admin' && pathname.startsWith(n.href));
                   return (
-                    <Link
+                    <button
                       key={n.href}
-                      href={n.href}
-                      onClick={() => setIsSidebarOpen(false)}
-                      className={`px-3 py-3 rounded-xl text-sm transition-all duration-200 flex items-center gap-3 touch-manipulation min-h-[48px] ${active ? 'bg-brand-600 text-white shadow-lg shadow-brand-600/30' : 'hover:bg-white/5 active:bg-white/10 text-gray-400 hover:text-white'}`}
+                      onTouchEnd={(e) => { e.preventDefault(); setIsSidebarOpen(false); router.push(n.href); }}
+                      onClick={() => { setIsSidebarOpen(false); router.push(n.href); }}
+                      className={`px-3 py-3 rounded-xl text-sm transition-all duration-200 flex items-center gap-3 min-h-[48px] w-full text-left ${active ? 'bg-brand-600 text-white shadow-lg shadow-brand-600/30' : 'active:bg-white/10 text-gray-400'}`}
                     >
                       <span className="text-xl w-7 text-center">{n.icon}</span>
                       <span className="font-medium">{n.label}</span>
-                    </Link>
+                    </button>
                   );
                 })}
               </div>
@@ -311,19 +311,21 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {BOTTOM_NAV.map((item) => {
           const active = pathname === item.href || (item.href !== '/admin' && pathname.startsWith(item.href));
           return (
-            <Link
+            <button
               key={item.href}
-              href={item.href}
+              onTouchEnd={(e) => { e.preventDefault(); router.push(item.href); }}
+              onClick={() => router.push(item.href)}
               className={`flex-1 flex flex-col items-center justify-center py-2 gap-0.5 min-h-[56px] transition-colors ${active ? 'text-brand-400' : 'text-gray-500'}`}
             >
               <span className="text-xl leading-none">{item.icon}</span>
               <span className="text-[10px] font-medium">{item.label}</span>
-            </Link>
+            </button>
           );
         })}
         <button
+          onTouchEnd={(e) => { e.preventDefault(); setIsSidebarOpen((v) => !v); }}
           onClick={() => setIsSidebarOpen((v) => !v)}
-          className={`flex-1 flex flex-col items-center justify-center py-2 gap-0.5 touch-manipulation min-h-[56px] transition-colors ${isSidebarOpen ? 'text-brand-400' : 'text-gray-500 active:text-gray-300'}`}
+          className={`flex-1 flex flex-col items-center justify-center py-2 gap-0.5 min-h-[56px] transition-colors ${isSidebarOpen ? 'text-brand-400' : 'text-gray-500'}`}
         >
           <Menu size={21} className="leading-none" />
           <span className="text-[10px] font-medium">Menu</span>
