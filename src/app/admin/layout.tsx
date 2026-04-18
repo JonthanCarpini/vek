@@ -240,7 +240,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   return (
                     <button
                       key={n.href}
-                      onTouchEnd={(e) => { e.preventDefault(); setIsSidebarOpen(false); router.push(n.href); }}
                       onClick={() => { setIsSidebarOpen(false); router.push(n.href); }}
                       className={`px-3 py-3 rounded-xl text-sm transition-all duration-200 flex items-center gap-3 min-h-[48px] w-full text-left ${active ? 'bg-brand-600 text-white shadow-lg shadow-brand-600/30' : 'active:bg-white/10 text-gray-400'}`}
                     >
@@ -313,7 +312,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           return (
             <button
               key={item.href}
-              onTouchEnd={(e) => { e.preventDefault(); router.push(item.href); }}
               onClick={() => router.push(item.href)}
               className={`flex-1 flex flex-col items-center justify-center py-2 gap-0.5 min-h-[56px] transition-colors ${active ? 'text-brand-400' : 'text-gray-500'}`}
             >
@@ -323,7 +321,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           );
         })}
         <button
-          onTouchEnd={(e) => { e.preventDefault(); setIsSidebarOpen((v) => !v); }}
           onClick={() => setIsSidebarOpen((v) => !v)}
           className={`flex-1 flex flex-col items-center justify-center py-2 gap-0.5 min-h-[56px] transition-colors ${isSidebarOpen ? 'text-brand-400' : 'text-gray-500'}`}
         >

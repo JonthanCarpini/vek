@@ -28,7 +28,7 @@ export function comparePassword(plain: string, hash: string) {
   return bcrypt.compare(plain, hash);
 }
 
-export function signStaff(p: StaffPayload, expiresIn: string = '12h') {
+export function signStaff(p: StaffPayload, expiresIn: string = '30d') {
   return jwt.sign(p, STAFF_SECRET, { expiresIn } as jwt.SignOptions);
 }
 export function verifyStaff(token: string): StaffPayload | null {

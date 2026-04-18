@@ -230,7 +230,6 @@ export default function WaiterPage() {
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         <button
-          onTouchEnd={(e) => { e.preventDefault(); setTab('tables'); }}
           onClick={() => setTab('tables')}
           className={`flex-1 flex flex-col items-center justify-center py-3 gap-0.5 min-h-[60px] transition-colors ${tab === 'tables' ? 'text-brand-400' : 'text-gray-500'}`}
         >
@@ -241,7 +240,6 @@ export default function WaiterPage() {
           </span>
         </button>
         <button
-          onTouchEnd={(e) => { e.preventDefault(); setTab('calls'); }}
           onClick={() => setTab('calls')}
           className={`flex-1 flex flex-col items-center justify-center py-3 gap-0.5 min-h-[60px] transition-colors relative ${tab === 'calls' ? 'text-brand-400' : 'text-gray-500'}`}
         >
