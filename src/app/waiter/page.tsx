@@ -112,104 +112,144 @@ export default function WaiterPage() {
   const totalReady = sessions.reduce((a, s) => a + (s.readyOrders || 0), 0);
 
   return (
-    <main className="min-h-screen p-4">
+    <div className="min-h-screen flex flex-col bg-[color:var(--bg)]">
       <PwaHead manifest="/manifest-waiter.json" />
-      <header className="flex justify-between items-center mb-4">
-        <div className="flex items-center gap-4">
-          <div className="text-2xl font-bold">🙋 Painel do Garçom</div>
-          {installPrompt && (
-            <button 
-              onClick={handleInstall}
-              className="btn btn-primary btn-sm flex items-center gap-2"
-            >
-              <Download size={16} /> Instalar App
-            </button>
+
+      {/* Top Bar */}
+      <header className="sticky top-0 z-40 bg-[color:var(--card)] border-b border-[color:var(--border)] flex items-center justify-between px-4 min-h-[56px]">
+        <div className="flex items-center gap-3">
+          <span className="text-xl">🛎️</span>
+          <span className="font-bold text-base">Painel Garçom</span>
+          {pendingCalls > 0 && (
+            <span className="bg-red-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">{pendingCalls}</span>
           )}
         </div>
-        <button onClick={() => { clearStaff(); router.push('/admin/login'); }} className="btn btn-ghost">Sair</button>
+        <div className="flex items-center gap-2">
+          {installPrompt && (
+            <button onClick={handleInstall} className="btn btn-primary text-xs px-3 py-2 flex items-center gap-1.5 min-h-0 h-9">
+              <Download size={14} /> Instalar
+            </button>
+          )}
+          <button onClick={() => { clearStaff(); router.push('/admin/login'); }} className="btn btn-ghost text-xs px-3 py-2 min-h-0 h-9">Sair</button>
+        </div>
       </header>
 
-      <div className="flex gap-2 mb-4 border-b border-gray-800">
-        <button onClick={() => setTab('tables')}
-          className={`px-4 py-2 text-sm border-b-2 -mb-px ${tab === 'tables' ? 'border-brand-500 text-white' : 'border-transparent text-gray-400 hover:text-white'}`}>
-          Mesas ({sessions.length}){totalReady > 0 && <span className="ml-2 bg-green-600 text-white px-2 py-0.5 rounded-full text-xs">{totalReady} prontos</span>}
-        </button>
-        <button onClick={() => setTab('calls')}
-          className={`px-4 py-2 text-sm border-b-2 -mb-px ${tab === 'calls' ? 'border-brand-500 text-white' : 'border-transparent text-gray-400 hover:text-white'}`}>
-          Chamados{pendingCalls > 0 && <span className="ml-2 bg-red-600 text-white px-2 py-0.5 rounded-full text-xs">{pendingCalls}</span>}
-        </button>
-      </div>
-
-      {tab === 'calls' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-          {calls.map((c: any) => (
-            <div key={c.id} className="card p-4">
-              <div className="flex justify-between items-start mb-2">
-                <div className="text-lg font-bold">Mesa {c.table?.number}</div>
-                <span className="text-xs text-gray-400">{elapsed(c.createdAt)}</span>
-              </div>
-              <div className="text-sm text-gray-300 mb-1">{c.session?.customerName}</div>
-              <div className="flex flex-col gap-1 mb-3">
-                <div className="text-xl font-semibold">{TYPE_LABEL[c.type]}</div>
-                {c.reason && (
-                  <div className="text-sm bg-amber-500/10 text-amber-200 p-2 rounded-lg border border-amber-500/20 italic">
-                    "{c.reason}"
-                  </div>
-                )}
-                {c.type === 'bill' && c.paymentHint && (
-                  <div className="text-sm bg-blue-500/10 text-blue-200 p-2 rounded-lg border border-blue-500/20">
-                    💳 Pagamento: <b>{c.paymentHint}</b>
-                    {c.splitCount && ` (Dividir em ${c.splitCount})`}
-                  </div>
-                )}
-              </div>
-              <button onClick={() => attend(c.id)} className="btn btn-primary w-full">Atender</button>
-            </div>
-          ))}
-          {calls.length === 0 && <div className="col-span-full text-center text-gray-500 py-16">Nenhum chamado no momento</div>}
-        </div>
-      )}
-
-      {tab === 'tables' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-          {sessions.length === 0 && <div className="col-span-full text-center text-gray-500 py-16">Nenhuma mesa ocupada</div>}
-          {sessions.map((s: any) => {
-            return (
-              <div key={s.id} className={`card p-4 ${s.readyOrders > 0 ? 'border-green-500/50' : ''}`}>
-                <div className="flex justify-between items-start mb-2">
+      {/* Content */}
+      <main className="flex-1 p-4 pb-28 overflow-y-auto">
+        {tab === 'calls' && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {calls.map((c: any) => (
+              <div key={c.id} className="card p-4">
+                <div className="flex justify-between items-start mb-3">
                   <div>
-                    <div className="text-xs text-gray-500">MESA</div>
-                    <div className="text-3xl font-black">{s.table?.number}</div>
-                    {s.table?.label && <div className="text-xs text-gray-400">{s.table.label}</div>}
+                    <div className="text-xs text-gray-500 uppercase tracking-wide">Mesa</div>
+                    <div className="text-3xl font-black leading-none">{c.table?.number}</div>
                   </div>
-                  <div className="text-right">
-                    {s.readyOrders > 0 && <span className="bg-green-600/30 text-green-300 px-2 py-1 rounded-full text-xs font-bold">{s.readyOrders} pronto(s)</span>}
+                  <span className="text-xs text-gray-400 bg-white/5 px-2 py-1 rounded-lg">{elapsed(c.createdAt)}</span>
+                </div>
+                <div className="text-sm text-gray-300 mb-1 font-medium">{c.session?.customerName}</div>
+                <div className="flex flex-col gap-2 mb-4">
+                  <div className="text-lg font-semibold">{TYPE_LABEL[c.type]}</div>
+                  {c.reason && (
+                    <div className="text-sm bg-amber-500/10 text-amber-200 p-3 rounded-xl border border-amber-500/20 italic">
+                      "{c.reason}"
+                    </div>
+                  )}
+                  {c.type === 'bill' && c.paymentHint && (
+                    <div className="text-sm bg-blue-500/10 text-blue-200 p-3 rounded-xl border border-blue-500/20">
+                      💳 Pagamento: <b>{c.paymentHint}</b>
+                      {c.splitCount && ` (Dividir em ${c.splitCount})`}
+                    </div>
+                  )}
+                </div>
+                <button onClick={() => attend(c.id)} className="btn btn-primary w-full">Atender</button>
+              </div>
+            ))}
+            {calls.length === 0 && (
+              <div className="col-span-full text-center text-gray-500 py-20">
+                <div className="text-4xl mb-3">✅</div>
+                <div>Nenhum chamado no momento</div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === 'tables' && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {sessions.length === 0 && (
+              <div className="col-span-full text-center text-gray-500 py-20">
+                <div className="text-4xl mb-3">🍽️</div>
+                <div>Nenhuma mesa ocupada</div>
+              </div>
+            )}
+            {sessions.map((s: any) => (
+              <div key={s.id} className={`card p-4 ${s.readyOrders > 0 ? 'border-green-500/50 shadow-green-900/20 shadow-lg' : ''}`}>
+                <div className="flex justify-between items-start mb-3">
+                  <div>
+                    <div className="text-xs text-gray-500 uppercase tracking-wide">Mesa</div>
+                    <div className="text-4xl font-black leading-none">{s.table?.number}</div>
+                    {s.table?.label && <div className="text-xs text-gray-400 mt-0.5">{s.table.label}</div>}
+                  </div>
+                  <div className="text-right flex flex-col gap-1">
+                    {s.readyOrders > 0 && (
+                      <span className="bg-green-600 text-white px-3 py-1 rounded-full text-xs font-bold">
+                        {s.readyOrders} pronto(s) 🔔
+                      </span>
+                    )}
+                    <span className="text-xs text-gray-500">{elapsed(s.openedAt)}</span>
                   </div>
                 </div>
-                <div className="text-sm text-gray-300">{s.customerName}</div>
-                <div className="text-xs text-gray-500 mb-3">Aberta {elapsed(s.openedAt)} atrás · {s.orderCount} pedido(s) · {formatBRL(s.subtotal)}</div>
+                <div className="text-sm font-medium text-gray-300 mb-1">{s.customerName}</div>
+                <div className="text-xs text-gray-500 mb-4">{s.orderCount} pedido(s) · {formatBRL(s.subtotal)}</div>
 
-                {/* Atalhos de pedidos prontos para entregar */}
                 {s.orders?.filter((o: any) => o.status === 'ready').length > 0 && (
-                  <div className="space-y-1 mb-3">
+                  <div className="space-y-2 mb-3">
                     {s.orders.filter((o: any) => o.status === 'ready').map((o: any) => (
-                      <button key={o.id} onClick={() => deliver(o.id)}
-                        className="btn btn-primary w-full text-sm py-1.5">
-                        🔔 Entregar #{o.sequenceNumber} ({formatBRL(Number(o.total))})
+                      <button key={o.id} onClick={() => deliver(o.id)} className="btn btn-primary w-full text-sm">
+                        🔔 Entregar #{o.sequenceNumber} — {formatBRL(Number(o.total))}
                       </button>
                     ))}
                   </div>
                 )}
 
-                <button onClick={() => setManageSession(s.id)}
-                  className="btn btn-ghost w-full text-sm border border-brand-500/30 text-brand-300 hover:bg-brand-500/10">
+                <button
+                  onClick={() => setManageSession(s.id)}
+                  className="btn btn-ghost w-full text-sm border border-brand-500/30 text-brand-300"
+                >
                   ⚙️ Gerenciar mesa
                 </button>
               </div>
-            );
-          })}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </main>
+
+      {/* Bottom Navigation */}
+      <nav
+        className="fixed bottom-0 left-0 right-0 bg-[color:var(--card)] border-t border-[color:var(--border)] flex z-50"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      >
+        <button
+          onClick={() => setTab('tables')}
+          className={`flex-1 flex flex-col items-center justify-center py-3 gap-0.5 touch-manipulation min-h-[60px] transition-colors ${tab === 'tables' ? 'text-brand-400' : 'text-gray-500'}`}
+        >
+          <span className="text-2xl leading-none">🍽️</span>
+          <span className="text-[11px] font-semibold">
+            Mesas {sessions.length > 0 && `(${sessions.length})`}
+            {totalReady > 0 && <span className="ml-1 bg-green-600 text-white text-[9px] px-1.5 py-0.5 rounded-full align-middle">{totalReady}</span>}
+          </span>
+        </button>
+        <button
+          onClick={() => setTab('calls')}
+          className={`flex-1 flex flex-col items-center justify-center py-3 gap-0.5 touch-manipulation min-h-[60px] transition-colors relative ${tab === 'calls' ? 'text-brand-400' : 'text-gray-500'}`}
+        >
+          <span className="text-2xl leading-none">🙋</span>
+          <span className="text-[11px] font-semibold">
+            Chamados
+            {pendingCalls > 0 && <span className="ml-1 bg-red-600 text-white text-[9px] px-1.5 py-0.5 rounded-full align-middle">{pendingCalls}</span>}
+          </span>
+        </button>
+      </nav>
 
       {manageSession && (
         <WaiterTableModal
@@ -220,10 +260,10 @@ export default function WaiterPage() {
 
       {/* Toast Notification */}
       {toast && (
-        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[100] bg-brand-600 text-white px-6 py-3 rounded-full shadow-2xl animate-fade-in font-bold flex items-center gap-2">
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[100] bg-brand-600 text-white px-6 py-3 rounded-full shadow-2xl font-bold flex items-center gap-2 whitespace-nowrap">
           <span className="text-xl">🔔</span> {toast}
         </div>
       )}
-    </main>
+    </div>
   );
 }

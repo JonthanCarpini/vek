@@ -10,12 +10,15 @@
   --muted: #9ca3af;
 }
 
-html, body { height: 100%; }
+html, body { height: 100%; min-height: 100dvh; }
 body {
   background: var(--bg);
   color: var(--text);
   font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
+  padding-top: env(safe-area-inset-top);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
 
 .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; }
@@ -23,6 +26,7 @@ body {
   display: inline-flex; align-items: center; justify-content: center;
   padding: 0.6rem 1rem; border-radius: 10px; font-weight: 600;
   transition: all .15s ease; cursor: pointer; border: 1px solid transparent;
+  min-height: 44px;
 }
 .btn-primary { background: #ea580c; color: white; }
 .btn-primary:hover { background: #c2410c; }
