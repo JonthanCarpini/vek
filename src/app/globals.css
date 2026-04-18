@@ -19,6 +19,14 @@ body {
   padding-top: env(safe-area-inset-top);
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Remove 300ms tap delay on mobile WebViews */
+a, button, [role="button"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  cursor: pointer;
 }
 
 .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; }

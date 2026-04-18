@@ -314,8 +314,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <Link
               key={item.href}
               href={item.href}
-              onClick={() => setIsSidebarOpen(false)}
-              className={`flex-1 flex flex-col items-center justify-center py-2 gap-0.5 touch-manipulation min-h-[56px] transition-colors ${active ? 'text-brand-400' : 'text-gray-500 active:text-gray-300'}`}
+              className={`flex-1 flex flex-col items-center justify-center py-2 gap-0.5 min-h-[56px] transition-colors ${active ? 'text-brand-400' : 'text-gray-500'}`}
             >
               <span className="text-xl leading-none">{item.icon}</span>
               <span className="text-[10px] font-medium">{item.label}</span>

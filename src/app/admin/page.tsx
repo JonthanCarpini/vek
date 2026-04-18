@@ -54,54 +54,55 @@ export default function AdminDashboard() {
         {storeDayId && <button onClick={() => setStoreDayId(null)} className="btn btn-ghost text-xs">Voltar para caixa atual</button>}
       </div>
 
-      {/* Status do dia */}
+      {/* Status do caixa */}
       {sd ? (
         <div className={`card p-4 mb-4 ${sd.status === 'open' ? 'border-green-500/40' : 'border-gray-700'}`}>
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-start justify-between gap-2 mb-2">
             <div>
-              <div className="text-xs text-gray-500">{sd.status === 'open' ? 'CAIXA ABERTO' : 'CAIXA FECHADO'}</div>
-              <div className="font-semibold">
-                {new Date(sd.openedAt).toLocaleString('pt-BR')}
-                {sd.closedAt && <> → {new Date(sd.closedAt).toLocaleString('pt-BR')}</>}
-              </div>
+              <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">{sd.status === 'open' ? 'CAIXA ABERTO' : 'CAIXA FECHADO'}</div>
+              <div className="font-semibold text-sm mt-0.5">{new Date(sd.openedAt).toLocaleString('pt-BR')}</div>
             </div>
-            <div className="flex flex-wrap gap-4 text-sm">
-              <div><span className="text-gray-400">Abertura:</span> <b>{formatBRL(sd.openingCash)}</b></div>
-              {sd.closingCash != null && <div><span className="text-gray-400">Fechamento:</span> <b>{formatBRL(sd.closingCash)}</b></div>}
-              {sd.expectedCash != null && <div><span className="text-gray-400">Esperado:</span> <b>{formatBRL(sd.expectedCash)}</b></div>}
-              {sd.cashDiff != null && <div><span className="text-gray-400">Diferença:</span> <b className={sd.cashDiff < 0 ? 'text-red-400' : sd.cashDiff > 0 ? 'text-amber-400' : 'text-green-400'}>{formatBRL(sd.cashDiff)}</b></div>}
-              {sd.totalSales != null && <div><span className="text-gray-400">Vendas:</span> <b>{formatBRL(sd.totalSales)}</b></div>}
+            <div className={`text-xs px-2 py-1 rounded-lg font-bold ${sd.status === 'open' ? 'bg-green-600/30 text-green-300' : 'bg-gray-700 text-gray-400'}`}>
+              {sd.status === 'open' ? 'Aberto' : 'Fechado'}
             </div>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+            <div className="bg-white/5 rounded-xl p-2">
+              <div className="text-[10px] text-gray-500">Abertura</div>
+              <div className="font-bold">{formatBRL(sd.openingCash)}</div>
+            </div>
+            {sd.closingCash != null && <div className="bg-white/5 rounded-xl p-2"><div className="text-[10px] text-gray-500">Fechamento</div><div className="font-bold">{formatBRL(sd.closingCash)}</div></div>}
+            {sd.totalSales != null && <div className="bg-white/5 rounded-xl p-2"><div className="text-[10px] text-gray-500">Vendas</div><div className="font-bold text-green-400">{formatBRL(sd.totalSales)}</div></div>}
+            {sd.cashDiff != null && <div className="bg-white/5 rounded-xl p-2"><div className="text-[10px] text-gray-500">Diferença</div><div className={`font-bold ${sd.cashDiff < 0 ? 'text-red-400' : sd.cashDiff > 0 ? 'text-amber-400' : 'text-green-400'}`}>{formatBRL(sd.cashDiff)}</div></div>}
           </div>
         </div>
       ) : (
-        <div className="card p-4 mb-4 text-sm text-gray-400">Nenhum caixa aberto — abra no <a href="/cashier" className="text-brand-400 underline">/cashier</a>. Mostrando dados desde 00:00.</div>
+        <div className="card p-4 mb-4 text-sm text-gray-400">Nenhum caixa aberto. <a href="/cashier" className="text-brand-400 underline">Abrir caixa</a></div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
+      {/* Cards de métricas — 2 colunas no mobile */}
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mb-5">
         {cards.map((c) => (
-          <div key={c.label} className="card p-6 flex flex-col justify-between hover:border-brand-500/30 transition-colors group">
-            <div>
-              <div className="text-4xl mb-4 group-hover:scale-110 transition-transform w-fit">{c.icon}</div>
-              <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">{c.label}</div>
-            </div>
-            <div className="text-3xl font-black text-white mt-1 break-all">{c.value}</div>
+          <div key={c.label} className="card p-3 sm:p-5 flex flex-col gap-2">
+            <span className="text-2xl sm:text-3xl">{c.icon}</span>
+            <div className="text-[10px] sm:text-xs font-bold text-gray-500 uppercase tracking-wider leading-tight">{c.label}</div>
+            <div className="text-xl sm:text-3xl font-black text-white break-all leading-none">{c.value}</div>
           </div>
         ))}
       </div>
 
       {/* Pagamentos por método */}
       {m?.paymentByMethod?.length > 0 && (
-        <div className="card p-6 mb-6 border-brand-500/5">
-          <div className="font-bold text-lg mb-4 flex items-center gap-2">
+        <div className="card p-4 mb-4">
+          <div className="font-bold text-sm mb-3 flex items-center gap-2">
             <span>💳</span> Pagamentos por método
           </div>
-          <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2">
             {m.paymentByMethod.map((p: any) => (
-              <div key={p.method} className="bg-white/5 border border-gray-800 rounded-2xl p-4 hover:bg-white/10 transition-colors">
-                <div className="text-[10px] font-black text-gray-500 uppercase tracking-tighter mb-1">{METHOD_LABELS[p.method] || p.method}</div>
-                <div className="text-xl font-black text-brand-500">{formatBRL(p.net)}</div>
-                {p.changeGiven > 0 && <div className="text-[10px] text-red-400 font-medium mt-1">Troco: {formatBRL(p.changeGiven)}</div>}
+              <div key={p.method} className="bg-white/5 border border-gray-800 rounded-xl p-3">
+                <div className="text-[10px] font-black text-gray-500 uppercase mb-1">{METHOD_LABELS[p.method] || p.method}</div>
+                <div className="text-base font-black text-brand-500">{formatBRL(p.net)}</div>
+                {p.changeGiven > 0 && <div className="text-[10px] text-red-400 mt-0.5">Troco: {formatBRL(p.changeGiven)}</div>}
               </div>
             ))}
           </div>
@@ -110,31 +111,21 @@ export default function AdminDashboard() {
 
       {/* Histórico de caixas */}
       {m?.recentDays?.length > 0 && (
-        <div className="card p-5">
-          <div className="font-semibold mb-3">Últimos caixas fechados</div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-gray-400">
-                <tr>
-                  <th className="text-left p-2">Abertura</th>
-                  <th className="text-left p-2">Fechamento</th>
-                  <th className="text-right p-2">Vendas</th>
-                  <th className="text-right p-2">Diferença</th>
-                  <th className="text-right p-2"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {m.recentDays.map((d: any) => (
-                  <tr key={d.id} className="border-t border-gray-800">
-                    <td className="p-2">{new Date(d.openedAt).toLocaleString('pt-BR')}</td>
-                    <td className="p-2">{d.closedAt ? new Date(d.closedAt).toLocaleString('pt-BR') : '—'}</td>
-                    <td className="p-2 text-right">{formatBRL(d.totalSales)}</td>
-                    <td className={`p-2 text-right ${d.cashDiff < 0 ? 'text-red-400' : d.cashDiff > 0 ? 'text-amber-400' : 'text-green-400'}`}>{formatBRL(d.cashDiff)}</td>
-                    <td className="p-2 text-right"><button onClick={() => setStoreDayId(d.id)} className="text-brand-400 text-xs hover:underline">Ver</button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <div className="card p-4">
+          <div className="font-semibold text-sm mb-3">Últimos caixas fechados</div>
+          <div className="flex flex-col gap-2">
+            {m.recentDays.map((d: any) => (
+              <div key={d.id} className="flex items-center justify-between bg-white/5 rounded-xl p-3 text-sm gap-2">
+                <div className="min-w-0">
+                  <div className="text-xs text-gray-400 truncate">{new Date(d.openedAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</div>
+                  <div className="font-bold">{formatBRL(d.totalSales)}</div>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <span className={`text-xs font-bold ${d.cashDiff < 0 ? 'text-red-400' : d.cashDiff > 0 ? 'text-amber-400' : 'text-green-400'}`}>{formatBRL(d.cashDiff)}</span>
+                  <button onClick={() => setStoreDayId(d.id)} className="text-brand-400 text-xs bg-brand-500/10 px-2 py-1 rounded-lg">Ver</button>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
