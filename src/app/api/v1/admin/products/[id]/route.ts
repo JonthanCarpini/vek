@@ -48,6 +48,14 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     const g = requireStaff(req, ROLES.MANAGER_UP);
     if (!g.ok) return g.res;
     const { id } = await params;
+    const { searchParams } = new URL(req.url);
+    const hard = searchParams.get('hard') === 'true';
+
+    if (hard) {
+      await prisma.product.delete({ where: { id } });
+      return ok({ deleted: true });
+    }
+
     await prisma.product.update({ where: { id }, data: { active: false, available: false } });
     return ok({ archived: true });
   } catch (e) { return serverError(e); }

@@ -56,12 +56,15 @@ export default function Products() {
   const [products, setProducts] = useState<any[]>([]);
   const [cats, setCats] = useState<any[]>([]);
   const [ingredients, setIngredients] = useState<any[]>([]);
-  const [form, setForm] = useState<any>(EMPTY);
+  const [form, setForm] = useState(EMPTY);
   const [editing, setEditing] = useState<any>(null);
   const [open, setOpen] = useState(false);
   const [filterCat, setFilterCat] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'archived'>('active');
   const [search, setSearch] = useState('');
+  const [stockModal, setStockModal] = useState<any>(null);
+  const [stockDelta, setStockDelta] = useState('');
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => { load(); }, [filterCat, filterStatus]);
   async function load() {
@@ -127,8 +130,44 @@ export default function Products() {
     setOpen(true);
   }
   async function archive(id: string) {
-    if (!confirm('Arquivar?')) return;
+    if (!confirm('Arquivar este produto? Ele não aparecerá mais no cardápio, mas continuará no histórico.')) return;
     try { await apiFetch(`/api/v1/admin/products/${id}`, { method: 'DELETE' }); load(); } catch (e: any) { alert(e.message); }
+  }
+  async function hardDelete(id: string) {
+    if (!confirm('EXCLUIR PERMANENTEMENTE? Esta ação não pode ser desfeita e removerá o produto de todos os registros.')) return;
+    try { await apiFetch(`/api/v1/admin/products/${id}?hard=true`, { method: 'DELETE' }); load(); } catch (e: any) { alert(e.message); }
+  }
+  async function toggleAvailable(p: any) {
+    try {
+      await apiFetch(`/api/v1/admin/products/${p.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ available: !p.available }),
+      });
+      load();
+    } catch (e: any) { alert(e.message); }
+  }
+  async function adjustStock(ingId: string) {
+    if (!stockDelta) return;
+    setBusy(true);
+    try {
+      await apiFetch(`/api/v1/admin/ingredients/${ingId}/stock`, {
+        method: 'POST',
+        body: JSON.stringify({ delta: Number(stockDelta.replace(',', '.')) }),
+      });
+      setStockDelta('');
+      // Atualiza o produto no modal se ele estiver aberto
+      if (stockModal) {
+        const updatedIngs = stockModal.ingredients.map((pi: any) => {
+          if (pi.ingredientId === ingId) {
+            return { ...pi, ingredient: { ...pi.ingredient, stock: Number(pi.ingredient.stock) + Number(stockDelta.replace(',', '.')) } };
+          }
+          return pi;
+        });
+        setStockModal({ ...stockModal, ingredients: updatedIngs });
+      }
+      load();
+    } catch (e: any) { alert(e.message); }
+    finally { setBusy(false); }
   }
 
   return (
@@ -141,18 +180,18 @@ export default function Products() {
       <div className="card p-3 mb-4 flex flex-wrap gap-3 items-end">
         <div className="flex-1 min-w-[180px]">
           <label className="label">Buscar</label>
-          <input className="input" placeholder="Nome do produto..." value={search} onChange={(e) => setSearch(e.target.value)} />
+          <input className="input" placeholder="Nome do produto..." value={search} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)} />
         </div>
         <div className="min-w-[160px]">
           <label className="label">Categoria</label>
-          <select className="input" value={filterCat} onChange={(e) => setFilterCat(e.target.value)}>
+          <select className="input" value={filterCat} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFilterCat(e.target.value)}>
             <option value="">Todas</option>
             {cats.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
         <div className="min-w-[140px]">
           <label className="label">Status</label>
-          <select className="input" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as any)}>
+          <select className="input" value={filterStatus} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFilterStatus(e.target.value as any)}>
             <option value="active">Ativos</option>
             <option value="archived">Arquivados</option>
             <option value="all">Todos</option>
@@ -161,29 +200,132 @@ export default function Products() {
         <div className="text-sm text-gray-400 ml-auto">{filtered.length} produto(s)</div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {filtered.map((p: any) => (
-          <div key={p.id} className="card p-3 flex gap-3">
-            {p.imageUrl ? <img src={p.imageUrl} alt="" className="w-20 h-20 rounded object-cover" /> : <div className="w-20 h-20 bg-[#1f1f2b] rounded" />}
-            <div className="flex-1 min-w-0">
-              <div className="font-semibold">{p.name}</div>
-              <div className="text-xs text-gray-400">{p.category?.name}</div>
-              <div className="text-brand-500 font-bold">{formatBRL(p.price)}</div>
-              <div className="text-xs text-gray-500">{p.available ? 'Disponível' : 'Indisponível'} • {p.station}</div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {filtered.map((p: any) => {
+          // Calcula o estoque limitante (considerando apenas ingredientes obrigatórios)
+          const mandatoryIngs = p.ingredients?.filter((pi: any) => !pi.optional) || [];
+          let minStock = Infinity;
+          mandatoryIngs.forEach((pi: any) => {
+            const possible = Math.floor(Number(pi.ingredient.stock) / Number(pi.quantity));
+            if (possible < minStock) minStock = possible;
+          });
+          const hasStock = mandatoryIngs.length > 0;
+          const displayStock = hasStock ? (minStock === Infinity ? 0 : minStock) : null;
+
+          return (
+            <div key={p.id} className={`card p-4 flex gap-4 transition-all ${!p.available ? 'opacity-60 grayscale-[0.5]' : ''}`}>
+              <div className="relative flex-shrink-0">
+                {p.imageUrl ? (
+                  <img src={p.imageUrl} alt="" className="w-24 h-24 rounded-xl object-cover shadow-lg" />
+                ) : (
+                  <div className="w-24 h-24 bg-[#1f1f2b] rounded-xl flex items-center justify-center text-2xl">🍔</div>
+                )}
+                {!p.available && (
+                  <div className="absolute inset-0 bg-black/60 rounded-xl flex items-center justify-center text-[10px] font-black text-white uppercase tracking-tighter">Pausado</div>
+                )}
+              </div>
+              
+              <div className="flex-1 min-w-0 flex flex-col justify-between">
+                <div>
+                  <div className="flex justify-between items-start">
+                    <div className="font-bold text-lg truncate leading-tight">{p.name}</div>
+                    <div className="text-brand-500 font-black">{formatBRL(p.price)}</div>
+                  </div>
+                  <div className="text-[10px] text-gray-500 uppercase font-bold tracking-tight mb-1">{p.category?.name} • {p.station}</div>
+                  
+                  {displayStock !== null && (
+                    <div className={`text-xs font-bold flex items-center gap-1 ${displayStock <= 5 ? 'text-red-400' : 'text-green-400'}`}>
+                      <span className="opacity-50">Estoque:</span> {displayStock} un
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex gap-2 mt-3">
+                  <button onClick={() => toggleAvailable(p)} className={`btn text-[10px] px-2 py-1 flex-1 font-black uppercase tracking-tighter ${p.available ? 'bg-amber-600/20 text-amber-400' : 'bg-green-600/20 text-green-400'}`}>
+                    {p.available ? 'Pausar' : 'Ativar'}
+                  </button>
+                  <button onClick={() => setStockModal(p)} className="btn bg-brand-600/10 text-brand-400 text-[10px] px-2 py-1 flex-1 font-black uppercase tracking-tighter">Estoque</button>
+                  <button onClick={() => openEdit(p)} className="btn bg-blue-600/10 text-blue-400 text-[10px] px-2 py-1 flex-1 font-black uppercase tracking-tighter">Editar</button>
+                  <button 
+                    onClick={() => p.active ? archive(p.id) : hardDelete(p.id)} 
+                    className="btn bg-red-600/10 text-red-400 text-[10px] px-2 py-1 font-black uppercase tracking-tighter"
+                    title={p.active ? 'Arquivar' : 'Excluir permanentemente'}
+                  >
+                    {p.active ? 'Arq' : 'Excl'}
+                  </button>
+                </div>
+              </div>
             </div>
-            <div className="flex flex-col gap-1">
-              <button onClick={() => openEdit(p)} className="btn btn-ghost text-xs">Editar</button>
-              <button onClick={() => archive(p.id)} className="btn btn-ghost text-xs text-red-400">Arquivar</button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
+
+      {/* Modal de Gerenciamento de Estoque */}
+      {stockModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={() => setStockModal(null)}>
+          <div className="bg-[#0b0b0f] border border-gray-800 rounded-2xl w-full max-w-md overflow-hidden animate-in zoom-in duration-200" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+            <header className="px-5 py-4 border-b border-gray-800 flex justify-between items-center bg-[#15151d]">
+              <div>
+                <h3 className="font-bold text-lg">Gerenciar Estoque</h3>
+                <div className="text-xs text-gray-500">{stockModal.name}</div>
+              </div>
+              <button onClick={() => setStockModal(null)} className="text-gray-400 text-2xl">&times;</button>
+            </header>
+            
+            <div className="p-5 space-y-4">
+              {stockModal.ingredients.length === 0 ? (
+                <div className="text-center py-6 text-gray-500">
+                  Este produto não tem ingredientes vinculados para controle de estoque.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {stockModal.ingredients.map((pi: any) => (
+                    <div key={pi.ingredientId} className="bg-white/5 rounded-xl p-4 border border-white/5">
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <div className="font-bold text-gray-200">{pi.ingredient.name}</div>
+                          <div className="text-[10px] text-gray-500 uppercase tracking-widest">Saldo Atual: <span className="text-gray-200">{Number(pi.ingredient.stock)} {pi.ingredient.unitOfMeasure}</span></div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-[10px] text-gray-500 uppercase tracking-widest">Uso/Pedido</div>
+                          <div className="font-black text-brand-500">{Number(pi.quantity)} {pi.ingredient.unitOfMeasure}</div>
+                        </div>
+                      </div>
+                      
+                      <div className="flex gap-2">
+                        <input 
+                          className="input flex-1 h-10 text-sm" 
+                          placeholder="Qtd a adicionar..." 
+                          type="text" 
+                          value={stockDelta} 
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setStockDelta(e.target.value)}
+                        />
+                        <button 
+                          onClick={() => adjustStock(pi.ingredientId)}
+                          disabled={busy || !stockDelta}
+                          className="btn btn-primary h-10 px-4 text-xs"
+                        >
+                          Entrada
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            
+            <footer className="p-4 bg-[#15151d] border-t border-gray-800">
+              <button onClick={() => setStockModal(null)} className="btn btn-ghost w-full">Fechar</button>
+            </footer>
+          </div>
+        </div>
+      )}
 
       {open && (
         <div className="fixed inset-0 bg-black/70 z-40 flex items-stretch md:items-center justify-center p-0 md:p-4" onClick={() => setOpen(false)}>
           <form onSubmit={save}
             className="bg-[#0b0b0f] border border-[color:var(--border)] w-full md:max-w-4xl md:rounded-2xl shadow-2xl flex flex-col max-h-screen md:max-h-[92vh]"
-            onClick={(e) => e.stopPropagation()}>
+            onClick={(e: React.MouseEvent) => e.stopPropagation()}>
 
             <header className="flex items-center justify-between px-5 py-3 border-b border-[color:var(--border)] sticky top-0 bg-[#0b0b0f] z-10">
               <div className="text-lg font-bold">{editing ? 'Editar produto' : 'Novo produto'}</div>
@@ -197,32 +339,32 @@ export default function Products() {
                 <section className="space-y-3">
                   <div>
                     <label className="label">Categoria *</label>
-                    <select className="input" value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })} required>
+                    <select className="input" value={form.categoryId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({ ...form, categoryId: e.target.value })} required>
                       <option value="">—</option>
                       {cats.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                   </div>
                   <div>
                     <label className="label">Nome *</label>
-                    <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+                    <input className="input" value={form.name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, name: e.target.value })} required />
                   </div>
                   <div>
                     <label className="label">Descrição</label>
-                    <textarea className="input" rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+                    <textarea className="input" rows={3} value={form.description} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setForm({ ...form, description: e.target.value })} />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="label">Preço *</label>
-                      <input type="number" step="0.01" className="input" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} required />
+                      <input type="number" step="0.01" className="input" value={form.price} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, price: e.target.value as any })} required />
                     </div>
                     <div>
                       <label className="label">Preparo (min)</label>
-                      <input type="number" className="input" value={form.preparationTimeMin} onChange={(e) => setForm({ ...form, preparationTimeMin: e.target.value })} />
+                      <input type="number" className="input" value={form.preparationTimeMin} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, preparationTimeMin: e.target.value as any })} />
                     </div>
                   </div>
                   <div>
                     <label className="label">Estação</label>
-                    <select className="input" value={form.station} onChange={(e) => setForm({ ...form, station: e.target.value })}>
+                    <select className="input" value={form.station} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({ ...form, station: e.target.value })}>
                       <option value="cozinha">Cozinha</option>
                       <option value="bar">Bar</option>
                       <option value="grill">Grill</option>
@@ -230,11 +372,11 @@ export default function Products() {
                   </div>
                   <div className="flex gap-4 flex-wrap pt-2">
                     <label className="flex items-center gap-2 text-sm">
-                      <input type="checkbox" checked={form.available} onChange={(e) => setForm({ ...form, available: e.target.checked })} />
+                      <input type="checkbox" checked={form.available} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, available: e.target.checked })} />
                       Disponível
                     </label>
                     <label className="flex items-center gap-2 text-sm">
-                      <input type="checkbox" checked={form.featured} onChange={(e) => setForm({ ...form, featured: e.target.checked })} />
+                      <input type="checkbox" checked={form.featured} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, featured: e.target.checked })} />
                       ⭐ Destaque (Painel TV)
                     </label>
                   </div>

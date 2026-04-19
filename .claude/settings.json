@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git push *)",
+      "Bash(ssh root@84.46.240.106 \"cd /opt/espetinhodochef && git pull origin main && docker compose -f docker-compose.prod.yml --env-file .env up -d --build\")",
+      "Bash(ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N \"\" -C \"claude-deploy\")",
+      "Bash(sshpass -p 'c11560011' ssh-copy-id -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519.pub root@84.46.240.106)",
+      "Bash(ssh -o *)",
+      "Bash(ssh -i ~/.ssh/id_ed25519 root@84.46.240.106 \"cd /opt/espetinhodochef && git pull origin main && docker compose -f docker-compose.prod.yml --env-file .env up -d --build\")",
+      "Bash(git commit -m ' *)",
+      "Bash(ssh -i ~/.ssh/id_ed25519 root@84.46.240.106 \"cd /opt/espetinhodochef && git pull origin main && docker compose -f docker-compose.prod.yml --env-file .env up -d --build 2>&1 | tail -20\")",
+      "Bash(ssh root@84.46.240.106 \"cd /root/mesa_digital && git pull origin main && docker compose build app && docker compose up -d app\")",
+      "Bash(ssh root@84.46.240.106 \"find /root -name 'docker-compose.yml' -o -name 'docker-compose.yaml' 2>/dev/null | head -5; ls /root/\")",
+      "Bash(ssh root@84.46.240.106 \"ls /\")",
+      "Bash(ssh root@84.46.240.106 \"ls /root/ && ls /opt/ && ls /var/www/ 2>/dev/null || true\")",
+      "Bash(ssh root@84.46.240.106 \"ls /root/espetinhodochef/\")",
+      "Bash(ssh root@84.46.240.106 \"find / -name 'docker-compose.yml' 2>/dev/null | grep -v proc | grep -v sys\")",
+      "Bash(ssh root@84.46.240.106 \"ls /opt/espetinhodochef/ && cat /opt/espetinhodochef/docker-compose.yml | head -30\")",
+      "Bash(ssh root@84.46.240.106 \"cd /opt/espetinhodochef && git pull origin main 2>&1\")",
+      "Bash(ssh root@84.46.240.106 \"cd /opt/espetinhodochef && docker compose up -d app 2>&1\")",
+      "Bash(ssh root@84.46.240.106 \"docker restart mesa_digital_app && sleep 15 && docker logs mesa_digital_app --tail=15 2>&1\")",
+      "Bash(ssh root@84.46.240.106 \"docker exec mesa_digital_mysql mysql -uroot -proot -e \\\\\"SELECT user, host FROM mysql.user;\\\\\" 2>&1\")",
+      "Bash(ssh root@84.46.240.106 \"docker volume ls | grep -i mesa\")",
+      "Bash(ssh root@84.46.240.106 \"ls /opt/espetinhodochef/.env* 2>/dev/null; cat /opt/espetinhodochef/.env 2>/dev/null || echo 'no .env file'\")",
+      "Bash(ssh root@84.46.240.106 \"cat /opt/espetinhodochef/docker-compose.yml\")",
+      "Bash(ssh root@84.46.240.106 \"cat /opt/espetinhodochef/docker-compose.prod.yml\")"
+    ]
+  }
+}

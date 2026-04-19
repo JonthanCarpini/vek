@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git --version)",
+      "Bash(gh --version)",
+      "Bash(git config *)",
+      "Bash(winget install *)",
+      "Bash(gh auth *)",
+      "Bash(npx cap *)",
+      "Bash(npm install *)",
+      "Read(//c/Program Files/Android/Android Studio/bin/**)",
+      "Read(//c/Users/admin/AppData/Local/Programs/Android Studio/**)",
+      "Bash(start \"\" \"C:/Program Files/Android/Android Studio/bin/studio64.exe\" \"C:/Users/admin/Documents/Projetos/mesa_digital/mobile/admin/android\")",
+      "Bash(start \"\" \"C:/Program Files/Android/Android Studio/bin/studio64.exe\" \"C:/Users/admin/Documents/Projetos/mesa_digital/mobile/waiter/android\")",
+      "Read(//c/Program Files/Android/**)",
+      "Read(//c/Users/admin/**)",
+      "Bash(start \"\" \"C:/Program Files/Android/Android Studio2/bin/studio64.exe\" \"C:/Users/admin/Documents/Projetos/mesa_digital/mobile/admin/android\")",
+      "Bash(where claude *)"
+    ]
+  }
+}

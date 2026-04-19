@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Mesa Digital Garçom</string>
+    <string name="title_activity_main">Mesa Digital Garçom</string>
+    <string name="package_name">site.espetinhodochef.waiter</string>
+    <string name="custom_url_scheme">site.espetinhodochef.waiter</string>
+</resources>
