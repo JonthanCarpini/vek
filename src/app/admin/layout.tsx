@@ -74,10 +74,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [toast, setToast] = useState<string | null>(null);
   const [installPrompt, setInstallPrompt] = useState<any>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   function showToast(m: string) { setToast(m); setTimeout(() => setToast(null), 4000); }
 
   useEffect(() => {
+    setMounted(true);
     // PWA Install Prompt
     const handleBeforeInstallPrompt = (e: any) => {
       e.preventDefault();
@@ -97,7 +99,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       if (pathname !== home) { router.replace(home); return; }
     }
     setUser((prev: any) => (prev?.id === s.user.id ? prev : s.user));
-    setIsSidebarOpen(false);
   }, [pathname]);
 
   useEffect(() => {
@@ -162,7 +163,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   if (pathname === '/admin/login') return <>{children}</>;
-  if (!user) return <div className="p-10 text-gray-400">Carregando...</div>;
+  if (!mounted || !user) return <div className="p-10 text-gray-400">Carregando...</div>;
 
   const role = user.role as Role;
   const filteredGroups = NAV_GROUPS.map(group => ({
@@ -241,8 +242,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     <Link
                       key={n.href}
                       href={n.href}
-                      prefetch
-                      className={`px-3 py-3 rounded-xl text-sm transition-all duration-200 flex items-center gap-3 min-h-[48px] w-full text-left ${active ? 'bg-brand-600 text-white shadow-lg shadow-brand-600/30' : 'active:bg-white/10 text-gray-400'}`}
+                      onClick={() => setIsSidebarOpen(false)}
+                      className={`px-3 py-3 rounded-xl text-sm transition-all duration-200 flex items-center gap-3 min-h-[48px] w-full text-left touch-manipulation ${active ? 'bg-brand-600 text-white shadow-lg shadow-brand-600/30' : 'active:bg-white/10 text-gray-400'}`}
                     >
                       <span className="text-xl w-7 text-center">{n.icon}</span>
                       <span className="font-medium">{n.label}</span>
@@ -314,8 +315,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <Link
               key={item.href}
               href={item.href}
-              prefetch
-              className={`flex-1 flex flex-col items-center justify-center py-2 gap-0.5 min-h-[56px] transition-colors ${active ? 'text-brand-400' : 'text-gray-500'}`}
+              onClick={() => setIsSidebarOpen(false)}
+              className={`flex-1 flex flex-col items-center justify-center py-2 gap-0.5 min-h-[56px] transition-colors touch-manipulation ${active ? 'text-brand-400' : 'text-gray-500'}`}
             >
               <span className="text-xl leading-none">{item.icon}</span>
               <span className="text-[10px] font-medium">{item.label}</span>
@@ -326,7 +327,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           onClick={() => setIsSidebarOpen((v) => !v)}
           className={`flex-1 flex flex-col items-center justify-center py-2 gap-0.5 min-h-[56px] transition-colors ${isSidebarOpen ? 'text-brand-400' : 'text-gray-500'}`}
         >
-          <Menu size={21} className="leading-none" />
+          <Menu size={21} />
           <span className="text-[10px] font-medium">Menu</span>
         </button>
       </nav>

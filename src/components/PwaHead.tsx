@@ -3,14 +3,6 @@ import { useEffect } from 'react';
 
 export function PwaHead({ manifest }: { manifest: string }) {
   useEffect(() => {
-    const links = document.querySelectorAll('link[rel="manifest"]');
-    links.forEach(l => l.remove());
-
-    const link = document.createElement('link');
-    link.rel = 'manifest';
-    link.href = manifest;
-    document.head.appendChild(link);
-
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then((regs) => {
         regs.forEach((r) => r.unregister());
@@ -21,5 +13,7 @@ export function PwaHead({ manifest }: { manifest: string }) {
     }
   }, [manifest]);
 
-  return null;
+  return (
+    <link rel="manifest" href={manifest} />
+  );
 }
