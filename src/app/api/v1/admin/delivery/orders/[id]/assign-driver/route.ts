@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { ok, serverError, fail, parseBody } from '@/lib/api';
 import { prisma } from '@/lib/prisma';
 import { requireStaff } from '@/lib/guard';
-import { emitToDashboard, SocketEvents } from '@/lib/socket';
+import { emitToDashboard, emitToDriver, SocketEvents } from '@/lib/socket';
 import { z } from 'zod';
 
 /**
@@ -28,6 +28,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (order.channel !== 'delivery') return fail('Pedido não é de delivery', 400);
     if (order.orderType !== 'delivery') return fail('Pedido é retirada, não entrega', 400);
 
+    const previousDriverId = order.driverId as string | null;
+
     if (p.data.driverId) {
       const driver = await (prisma as any).driver.findUnique({ where: { id: p.data.driverId } });
       if (!driver || driver.unitId !== g.staff.unitId || !driver.active) {
@@ -43,6 +45,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     emitToDashboard(g.staff.unitId, SocketEvents.ORDER_UPDATED, {
       id, driverId: p.data.driverId,
     });
+
+    if (previousDriverId && previousDriverId !== p.data.driverId) {
+      emitToDriver(previousDriverId, SocketEvents.ORDER_UNASSIGNED, { orderId: id });
+    }
+    if (p.data.driverId) {
+      emitToDriver(p.data.driverId, SocketEvents.ORDER_ASSIGNED, {
+        orderId: id,
+        sequenceNumber: order.sequenceNumber,
+        customerName: order.customerName,
+        deliveryAddress: order.deliveryAddress,
+        total: Number(order.total),
+        status: order.status,
+      });
+    }
 
     return ok({ ok: true });
   } catch (e) {

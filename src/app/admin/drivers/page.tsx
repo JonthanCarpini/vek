@@ -95,6 +95,19 @@ export default function AdminDriversPage() {
                   {' • '}
                   {d.totalDeliveries} entrega{d.totalDeliveries !== 1 ? 's' : ''}
                 </div>
+                {(d.commissionPerDelivery > 0 || d.commissionPercent > 0) && (
+                  <div className="text-xs text-orange-400 mt-1">
+                    💰 Comissão:{' '}
+                    {d.commissionPerDelivery > 0 && <>R$ {Number(d.commissionPerDelivery).toFixed(2)}/entrega</>}
+                    {d.commissionPerDelivery > 0 && d.commissionPercent > 0 && ' + '}
+                    {d.commissionPercent > 0 && <>{d.commissionPercent}% da taxa</>}
+                  </div>
+                )}
+                {d.currentLat != null && d.currentLng != null && d.lastLocationAt && (
+                  <div className="text-xs text-gray-500 mt-0.5">
+                    📍 Última localização: {new Date(d.lastLocationAt).toLocaleString('pt-BR')}
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-1">
                 <button
@@ -144,6 +157,8 @@ function DriverForm({
     vehicle: driver?.vehicle || 'moto',
     licensePlate: driver?.licensePlate || '',
     pin: '',
+    commissionPerDelivery: driver?.commissionPerDelivery ? String(driver.commissionPerDelivery) : '',
+    commissionPercent: driver?.commissionPercent ? String(driver.commissionPercent) : '',
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -168,6 +183,16 @@ function DriverForm({
         licensePlate: form.licensePlate || null,
       };
       if (form.pin) payload.pin = form.pin;
+
+      const perDelivery = form.commissionPerDelivery.trim();
+      const percent = form.commissionPercent.trim();
+      payload.commissionPerDelivery = perDelivery === '' ? null : Number(perDelivery.replace(',', '.'));
+      payload.commissionPercent = percent === '' ? null : Number(percent.replace(',', '.'));
+      if (Number.isNaN(payload.commissionPerDelivery) || Number.isNaN(payload.commissionPercent)) {
+        setError('Valores de comissão inválidos');
+        setSaving(false);
+        return;
+      }
 
       try {
         await apiFetch(url, { method, body: JSON.stringify(payload) });
@@ -243,6 +268,37 @@ function DriverForm({
             <p className="text-xs text-gray-400 mt-1">
               Usado para o motoboy acessar a área /driver
             </p>
+          </div>
+
+          <div className="border-t border-[var(--border)] pt-3">
+            <h3 className="text-sm font-semibold text-orange-400 mb-2">💰 Comissão (opcional)</h3>
+            <p className="text-xs text-gray-400 mb-3">
+              Deixe em branco se o motoboy não recebe comissão. Pode combinar valor fixo + percentual.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label">Valor fixo por entrega (R$)</label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={form.commissionPerDelivery}
+                  onChange={(e) => setForm({ ...form, commissionPerDelivery: e.target.value.replace(/[^\d.,]/g, '') })}
+                  placeholder="Ex: 5.00"
+                  className="input w-full"
+                />
+              </div>
+              <div>
+                <label className="label">% da taxa de entrega</label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={form.commissionPercent}
+                  onChange={(e) => setForm({ ...form, commissionPercent: e.target.value.replace(/[^\d.,]/g, '') })}
+                  placeholder="Ex: 50"
+                  className="input w-full"
+                />
+              </div>
+            </div>
           </div>
           {error && <div className="text-sm text-red-400 bg-red-600/10 border border-red-500/30 p-2 rounded">{error}</div>}
         </div>

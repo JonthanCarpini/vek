@@ -1,7 +1,17 @@
 'use client';
 
 import { use, useEffect, useState } from 'react';
-import { CheckCircle2, Clock, ChefHat, Package, Bike, Check } from 'lucide-react';
+import { CheckCircle2, Clock, ChefHat, Package, Bike, Check, MapPin } from 'lucide-react';
+import { getSocket, joinRooms } from '@/lib/socket-client';
+
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number) {
+  const R = 6371;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
 
 const STEPS = [
   { id: 'received', label: 'Pedido recebido', icon: CheckCircle2 },
@@ -42,7 +52,28 @@ export default function PublicTrackingPage({ params }: { params: Promise<{ id: s
     };
     load();
     const interval = setInterval(load, 15_000);
-    return () => { mounted = false; clearInterval(interval); };
+
+    joinRooms([`order:${id}`]);
+    const sock = getSocket();
+    const onLocation = (p: any) => {
+      if (p?.orderId !== id) return;
+      setOrder((o: any) => o ? {
+        ...o,
+        driver: o.driver ? { ...o.driver, currentLat: p.lat, currentLng: p.lng, lastLocationAt: p.at } : o.driver,
+      } : o);
+    };
+    const onUpdate = () => load();
+    sock.on('driver.location', onLocation);
+    sock.on('order.status_changed', onUpdate);
+    sock.on('order.updated', onUpdate);
+
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+      sock.off('driver.location', onLocation);
+      sock.off('order.status_changed', onUpdate);
+      sock.off('order.updated', onUpdate);
+    };
   }, [id]);
 
   if (loading) {
@@ -115,6 +146,15 @@ export default function PublicTrackingPage({ params }: { params: Promise<{ id: s
                 {order.driver.phone}
               </a>
             )}
+            {order.status === 'dispatched' && order.driver.currentLat != null && order.driver.currentLng != null && (
+              <DriverDistance
+                driverLat={order.driver.currentLat}
+                driverLng={order.driver.currentLng}
+                destLat={order.deliveryLat}
+                destLng={order.deliveryLng}
+                lastLocationAt={order.driver.lastLocationAt}
+              />
+            )}
           </div>
         )}
 
@@ -164,6 +204,44 @@ export default function PublicTrackingPage({ params }: { params: Promise<{ id: s
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function DriverDistance({
+  driverLat, driverLng, destLat, destLng, lastLocationAt,
+}: {
+  driverLat: number; driverLng: number;
+  destLat: number | null; destLng: number | null;
+  lastLocationAt: string | null;
+}) {
+  if (destLat == null || destLng == null) return null;
+  const km = haversineKm(driverLat, driverLng, destLat, destLng);
+  const when = lastLocationAt ? new Date(lastLocationAt) : null;
+  const secondsAgo = when ? Math.round((Date.now() - when.getTime()) / 1000) : null;
+  const stale = secondsAgo != null && secondsAgo > 120;
+  const mapUrl = `https://www.google.com/maps/dir/?api=1&origin=${driverLat},${driverLng}&destination=${destLat},${destLng}`;
+  return (
+    <div className="mt-3 p-3 rounded-lg bg-orange-50 border border-orange-200">
+      <div className="flex items-center gap-2 text-orange-800">
+        <MapPin className="w-4 h-4" />
+        <span className="text-sm font-semibold">
+          Motoboy a {km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`} de você
+        </span>
+      </div>
+      {secondsAgo != null && (
+        <div className={`text-[11px] mt-1 ${stale ? 'text-gray-500' : 'text-orange-700'}`}>
+          {stale ? 'Localização antiga — atualizando...' : `Atualizado há ${secondsAgo < 60 ? `${secondsAgo}s` : `${Math.round(secondsAgo / 60)}min`}`}
+        </div>
+      )}
+      <a
+        href={mapUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-2 inline-block text-xs text-orange-700 underline"
+      >
+        Ver trajeto no mapa
+      </a>
     </div>
   );
 }

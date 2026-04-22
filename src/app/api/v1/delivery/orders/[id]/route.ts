@@ -18,15 +18,31 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       include: {
         items: true,
         customer: { select: { id: true, name: true, phone: true } },
-        driver: { select: { id: true, name: true, phone: true, vehicle: true } },
-      },
+        driver: {
+          select: {
+            id: true, name: true, phone: true, vehicle: true,
+            currentLat: true, currentLng: true, lastLocationAt: true,
+          },
+        },
+        unit: { select: { addressLat: true, addressLng: true } },
+      } as any,
     }) as any;
 
     if (!order) return fail('Pedido não encontrado', 404);
-    // Se customer autenticado, valida que é o dono. Tracking público permite qualquer um que tenha o id.
     if (customer && order.customerId && order.customerId !== customer.sub) {
       return fail('Acesso negado', 403);
     }
+
+    const shareDriverLocation = order.status === 'dispatched' && order.driver?.currentLat != null;
+    const driverInfo = order.driver ? {
+      id: order.driver.id,
+      name: order.driver.name,
+      phone: order.driver.phone,
+      vehicle: order.driver.vehicle,
+      currentLat: shareDriverLocation ? Number(order.driver.currentLat) : null,
+      currentLng: shareDriverLocation ? Number(order.driver.currentLng) : null,
+      lastLocationAt: shareDriverLocation ? order.driver.lastLocationAt : null,
+    } : null;
 
     return ok({
       order: {
@@ -46,6 +62,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         customerName: order.customerName,
         customerPhone: order.customerPhone,
         deliveryAddress: order.deliveryAddress,
+        deliveryLat: order.deliveryLat ? Number(order.deliveryLat) : null,
+        deliveryLng: order.deliveryLng ? Number(order.deliveryLng) : null,
         distanceKm: order.distanceKm ? Number(order.distanceKm) : null,
         estimatedDeliveryAt: order.estimatedDeliveryAt,
         createdAt: order.createdAt,
@@ -53,7 +71,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         readyAt: order.readyAt,
         dispatchedAt: order.dispatchedAt,
         deliveredAt: order.deliveredAt,
-        driver: order.driver,
+        driver: driverInfo,
+        origin: order.unit?.addressLat != null && order.unit?.addressLng != null
+          ? { lat: Number(order.unit.addressLat), lng: Number(order.unit.addressLng) }
+          : null,
         items: order.items.map((i: any) => ({
           id: i.id,
           name: i.name,

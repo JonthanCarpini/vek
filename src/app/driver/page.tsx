@@ -1,11 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
   Bike, LogOut, MapPin, Phone, Package, CheckCircle2, Loader2,
-  RefreshCw, History, Navigation,
+  RefreshCw, History, Navigation, BarChart3,
 } from 'lucide-react';
+import { getSocket, joinRooms } from '@/lib/socket-client';
 
 type Tab = 'active' | 'history';
 
@@ -62,12 +64,89 @@ export default function DriverPage() {
     if (driver) loadOrders(tab);
   }, [tab]);
 
-  // Auto-refresh da lista ativa a cada 20s
+  // Auto-refresh lento como fallback (socket.io é a fonte primária de eventos)
   useEffect(() => {
     if (tab !== 'active' || !driver) return;
-    const t = setInterval(() => loadOrders('active'), 20_000);
+    const t = setInterval(() => loadOrders('active'), 60_000);
     return () => clearInterval(t);
   }, [tab, driver]);
+
+  // Socket.io: escuta eventos do motoboy em tempo real
+  useEffect(() => {
+    if (!driver?.id) return;
+    joinRooms([`driver:${driver.id}`]);
+    const sock = getSocket();
+    const reload = () => { if (tab === 'active') loadOrders('active'); };
+    const onAssigned = (p: any) => {
+      reload();
+      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+        new Notification('📦 Nova entrega atribuída', {
+          body: `#${p?.sequenceNumber ?? ''} — ${p?.customerName ?? ''}`,
+          tag: `order-${p?.orderId}`,
+        });
+      }
+      try {
+        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.frequency.value = 880;
+        gain.gain.value = 0.15;
+        osc.connect(gain).connect(ctx.destination);
+        osc.start();
+        setTimeout(() => { osc.stop(); ctx.close(); }, 350);
+      } catch {}
+    };
+    sock.on('order.assigned', onAssigned);
+    sock.on('order.unassigned', reload);
+    sock.on('order.status_changed', reload);
+    sock.on('order.updated', reload);
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {});
+    }
+    return () => {
+      sock.off('order.assigned', onAssigned);
+      sock.off('order.unassigned', reload);
+      sock.off('order.status_changed', reload);
+      sock.off('order.updated', reload);
+    };
+  }, [driver?.id, tab]);
+
+  // Geolocalização em tempo-real: enquanto houver entrega `dispatched`, envia coord ao servidor
+  const hasInTransit = orders.some((o) => o.status === 'dispatched');
+  const watchIdRef = useRef<number | null>(null);
+  const lastSentRef = useRef<number>(0);
+  useEffect(() => {
+    if (!driver?.id || !hasInTransit || typeof navigator === 'undefined' || !navigator.geolocation) {
+      if (watchIdRef.current != null) {
+        navigator.geolocation?.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+      }
+      return;
+    }
+    const push = async (lat: number, lng: number) => {
+      const now = Date.now();
+      if (now - lastSentRef.current < 10_000) return;
+      lastSentRef.current = now;
+      try {
+        await fetch('/api/v1/driver/location', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lat, lng }),
+        });
+      } catch {}
+    };
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => push(pos.coords.latitude, pos.coords.longitude),
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 8_000, timeout: 20_000 },
+    );
+    return () => {
+      if (watchIdRef.current != null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+      }
+    };
+  }, [driver?.id, hasInTransit]);
 
   const handleLogout = async () => {
     await fetch('/api/v1/driver/auth/me', { method: 'POST' });
@@ -91,6 +170,25 @@ export default function DriverPage() {
       if (!res.ok) {
         alert(body.error?.message || body.error || 'Erro');
         return;
+      }
+      await loadOrders(tab);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const readyOrders = orders.filter((o) => o.status === 'ready');
+  const handleDispatchAll = async () => {
+    if (readyOrders.length === 0) return;
+    if (!confirm(`Sair para entrega com ${readyOrders.length} pedido(s)? Use esta opção quando for entregar vários na mesma viagem.`)) return;
+    setBusyId('__all__');
+    try {
+      for (const o of readyOrders) {
+        await fetch(`/api/v1/driver/orders/${o.id}/status`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'dispatched' }),
+        });
       }
       await loadOrders(tab);
     } finally {
@@ -122,13 +220,22 @@ export default function DriverPage() {
               </p>
             </div>
           </div>
-          <button
-            onClick={handleLogout}
-            className="p-2 text-gray-400 hover:text-gray-200 hover:bg-white/5 rounded"
-            title="Sair"
-          >
-            <LogOut className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-1">
+            <Link
+              href="/driver/stats"
+              className="p-2 text-gray-400 hover:text-gray-200 hover:bg-white/5 rounded"
+              title="Estatísticas"
+            >
+              <BarChart3 className="w-5 h-5" />
+            </Link>
+            <button
+              onClick={handleLogout}
+              className="p-2 text-gray-400 hover:text-gray-200 hover:bg-white/5 rounded"
+              title="Sair"
+            >
+              <LogOut className="w-5 h-5" />
+            </button>
+          </div>
         </div>
       </header>
 
@@ -184,6 +291,17 @@ export default function DriverPage() {
           </div>
         ) : (
           <div className="space-y-3">
+            {tab === 'active' && readyOrders.length >= 2 && (
+              <button
+                onClick={handleDispatchAll}
+                disabled={busyId === '__all__'}
+                className="btn btn-primary w-full disabled:opacity-50"
+              >
+                {busyId === '__all__'
+                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                  : <>🛵 Saí com {readyOrders.length} entregas na viagem</>}
+              </button>
+            )}
             {orders.map((o) => (
               <OrderCard
                 key={o.id}

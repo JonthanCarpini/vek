@@ -12,6 +12,8 @@ const updateSchema = z.object({
   licensePlate: z.string().trim().max(10).nullable().optional(),
   active: z.boolean().optional(),
   pin: z.string().trim().regex(/^\d{4,6}$/).nullable().optional(),
+  commissionPerDelivery: z.number().nonnegative().nullable().optional(),
+  commissionPercent: z.number().min(0).max(100).nullable().optional(),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

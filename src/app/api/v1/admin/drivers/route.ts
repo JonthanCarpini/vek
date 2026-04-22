@@ -40,6 +40,11 @@ export async function GET(req: NextRequest) {
         totalDeliveries: d.totalDeliveries,
         lastLoginAt: d.lastLoginAt,
         hasPin: !!d.pinHash,
+        commissionPerDelivery: d.commissionPerDelivery ? Number(d.commissionPerDelivery) : 0,
+        commissionPercent: d.commissionPercent ? Number(d.commissionPercent) : 0,
+        currentLat: d.currentLat,
+        currentLng: d.currentLng,
+        lastLocationAt: d.lastLocationAt,
       })),
     });
   } catch (e) {
@@ -53,6 +58,8 @@ const createSchema = z.object({
   vehicle: z.enum(['moto', 'bike', 'carro', 'pe']).default('moto'),
   licensePlate: z.string().trim().max(10).optional(),
   pin: z.string().trim().regex(/^\d{4,6}$/, 'PIN deve ter 4-6 dígitos').optional(),
+  commissionPerDelivery: z.number().nonnegative().optional(),
+  commissionPercent: z.number().min(0).max(100).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -80,6 +87,8 @@ export async function POST(req: NextRequest) {
         vehicle: p.data.vehicle,
         licensePlate: p.data.licensePlate,
         pinHash,
+        commissionPerDelivery: p.data.commissionPerDelivery ?? null,
+        commissionPercent: p.data.commissionPercent ?? null,
         active: true,
       },
     });

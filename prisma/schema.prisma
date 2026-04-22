@@ -448,6 +448,13 @@ model Driver {
   // Login via PIN (OTP WhatsApp opcional)
   pinHash         String?
   lastLoginAt     DateTime?
+  // Localização em tempo-real (atualizada pelo app do motoboy)
+  currentLat      Float?
+  currentLng      Float?
+  lastLocationAt  DateTime?
+  // Comissão: valor fixo por entrega OU percentual sobre a taxa. Se os dois definidos, soma.
+  commissionPerDelivery Decimal? @db.Decimal(10, 2)
+  commissionPercent     Decimal? @db.Decimal(5, 2) // % sobre deliveryFee
   // Estatísticas
   totalDeliveries Int       @default(0)
   createdAt       DateTime  @default(now())

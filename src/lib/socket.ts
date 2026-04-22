@@ -18,6 +18,9 @@ export const SocketEvents = {
   ORDER_READY: 'order.ready',
   STORE_STATE_CHANGED: 'store.state_changed',
   METRICS_TICK: 'metrics.tick',
+  ORDER_ASSIGNED: 'order.assigned',
+  ORDER_UNASSIGNED: 'order.unassigned',
+  DRIVER_LOCATION: 'driver.location',
 } as const;
 
 export function emitToKitchen(unitId: string, event: string, payload: unknown) {
@@ -38,4 +41,10 @@ export function emitToUnit(unitId: string, event: string, payload: unknown) {
   io.to(`unit:${unitId}:kitchen`).emit(event, payload);
   io.to(`unit:${unitId}:waiters`).emit(event, payload);
   io.to(`unit:${unitId}:dashboard`).emit(event, payload);
+}
+export function emitToDriver(driverId: string, event: string, payload: unknown) {
+  getIO()?.to(`driver:${driverId}`).emit(event, payload);
+}
+export function emitToOrderTracking(orderId: string, event: string, payload: unknown) {
+  getIO()?.to(`order:${orderId}`).emit(event, payload);
 }
