@@ -12,9 +12,13 @@ class WhatsAppService {
     if (!unit || !unit.whatsappEnabled) return;
 
     const client = new Client({
-      authStrategy: new LocalAuth({ clientId: unitId }),
+      authStrategy: new LocalAuth({
+        clientId: unitId,
+        dataPath: './.wwebjs_auth'
+      }),
       puppeteer: {
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+        executablePath: process.env.CHROME_PATH || undefined,
         handleSIGINT: false,
       }
     });
