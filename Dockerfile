@@ -5,6 +5,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     openssl \
     ca-certificates \
+    chromium \
     libnss3 \
     libasound2 \
     libatk1.0-0 \
@@ -41,6 +42,10 @@ RUN apt-get update && apt-get install -y \
     libappindicator1 \
     xdg-utils \
     && rm -rf /var/lib/apt/lists/*
+
+ENV CHROME_PATH=/usr/bin/chromium
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 FROM base AS deps
 COPY package.json package-lock.json ./
