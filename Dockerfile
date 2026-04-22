@@ -68,4 +68,4 @@ RUN mkdir -p /app/public/uploads
 RUN mkdir -p /app/.wwebjs_auth && chmod -R 777 /app/.wwebjs_auth
 
 EXPOSE 3000
-CMD ["sh", "-c", "(npx prisma migrate deploy 2>/dev/null || npx prisma db push --skip-generate --accept-data-loss) && node server.js"]
+CMD ["sh", "-c", "(npx prisma migrate deploy 2>/dev/null || npx prisma db push --skip-generate --accept-data-loss) && node --import tsx server.js"]
