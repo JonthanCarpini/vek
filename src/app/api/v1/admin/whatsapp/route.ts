@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
     if (!unitId) return fail('unidade não encontrada');
 
     const unit = await prisma.unit.findUnique({
-      where: { id: g.staff.uid },
+      where: { id: unitId },
       select: {
         id: true,
         whatsappEnabled: true,
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
 
     if (action === 'toggle') {
       await (prisma.unit as any).update({
-        where: { id: g.staff.uid },
+        where: { id: unitId },
         data: { whatsappEnabled: enabled }
       });
       if (enabled) {
