@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { getStaffFromRequest, getCustomerFromRequest, StaffRole, StaffPayload, CustomerPayload } from './auth';
+import { getStaffFromRequest, getCustomerFromRequest, getDriverFromRequest, StaffRole, StaffPayload, CustomerPayload, DriverPayload } from './auth';
 import { forbidden, unauthorized } from './api';
 
 export function requireStaff(req: NextRequest, roles?: StaffRole[]):
@@ -17,6 +17,14 @@ export function requireCustomer(req: NextRequest):
   const customer = getCustomerFromRequest(req);
   if (!customer) return { ok: false, res: unauthorized('Login necessário') };
   return { ok: true, customer };
+}
+
+export function requireDriver(req: NextRequest):
+  | { ok: true; driver: DriverPayload }
+  | { ok: false; res: Response } {
+  const driver = getDriverFromRequest(req);
+  if (!driver) return { ok: false, res: unauthorized('Login de motoboy necessário') };
+  return { ok: true, driver };
 }
 
 export const ROLES = {

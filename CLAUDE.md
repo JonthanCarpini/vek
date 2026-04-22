@@ -101,14 +101,16 @@ All routes live under `src/app/api/v1/`:
 | `/waiter/` | Waiter staff | Staff JWT |
 | `/cashier/` | Cashier staff | Staff JWT |
 | `/delivery/` | Customer (delivery/takeout) | Customer JWT (`x-customer-token` header or `md_customer` cookie, 60d) |
+| `/driver/` | Motoboy (delivery driver) | Driver JWT (`x-driver-token` header or `md_driver` cookie, 30d) |
 | `/internal/` | Server-to-server (polling, webhooks) | `JWT_SECRET` Bearer |
 
-RBAC is enforced via `src/lib/guard.ts`. Three guards: `requireStaff(req, roles?)`, `requireCustomer(req)`, and role-based access. Six staff roles: `super_admin`, `admin`, `manager`, `waiter`, `kitchen`, `cashier`.
+RBAC is enforced via `src/lib/guard.ts`. Four guards: `requireStaff(req, roles?)`, `requireCustomer(req)`, `requireDriver(req)`, and role-based access. Six staff roles: `super_admin`, `admin`, `manager`, `waiter`, `kitchen`, `cashier`.
 
-Three JWT secrets must stay separate:
+Four JWT secrets must stay separate:
 - `JWT_SECRET` — staff tokens (30d) + internal endpoints
 - `JWT_SESSION_SECRET` — customer dine-in sessions (4h)
 - `JWT_CUSTOMER_SECRET` — delivery customer login (60d)
+- `JWT_DRIVER_SECRET` — motoboy login (30d)
 
 ### Frontend pages
 
@@ -123,6 +125,8 @@ Three JWT secrets must stay separate:
 | `/display` | Carousel display for screens |
 | `/delivery/[slug]` | Public delivery/takeout ordering (login OTP → address → menu → cart → checkout → tracking) |
 | `/t/[id]` | Public order tracking page (no auth, accessed via WhatsApp link) |
+| `/driver/login` | Motoboy login (phone + PIN) |
+| `/driver` | Motoboy dashboard (assigned deliveries, dispatch/deliver actions, Google Maps link) |
 
 ### State management
 
@@ -174,6 +178,7 @@ DATABASE_URL
 JWT_SECRET                  # Staff tokens + internal endpoints
 JWT_SESSION_SECRET          # Customer dine-in sessions
 JWT_CUSTOMER_SECRET         # Delivery customer login
+JWT_DRIVER_SECRET           # Motoboy login
 NEXT_PUBLIC_APP_URL         # Must be browser-accessible
 NEXT_PUBLIC_SOCKET_URL      # Must be browser-accessible (WebSocket upgrade)
 
@@ -393,6 +398,33 @@ Triggered from `/api/v1/admin/delivery/orders/[id]/status` — fire-and-forget `
 6. Toggle `deliveryEnabled` and/or `takeoutEnabled`
 7. `/admin/whatsapp` → connect WhatsApp (OTP + notifications require it)
 8. `/admin/drivers` → add motoboys with PIN
+
+### Driver (Motoboy) area
+
+Simple PWA-like area for delivery drivers. Login with phone + PIN (no WhatsApp OTP here — PIN is set by admin when creating the driver).
+
+**Pages:**
+- `/driver/login` — phone + PIN form, checks session first and redirects to `/driver` if already logged in
+- `/driver` — dashboard with two tabs (Active / History), auto-refresh every 20s, Google Maps "Open directions" button, WhatsApp/phone links, item details
+
+**API routes (`/api/v1/driver/`):**
+
+| Route | Purpose |
+|-------|---------|
+| `POST /auth/login` | Validates phone + PIN via bcrypt, issues `md_driver` cookie (30d), updates `Driver.lastLoginAt` |
+| `GET /auth/me` | Returns current driver profile |
+| `POST /auth/me` | Logout (clears cookie) |
+| `GET /orders?status=active\|history` | Lists orders where `driverId=me`. Active = `ready+dispatched`; History = last 30 `delivered+cancelled` |
+| `POST /orders/[id]/status` | Driver-only transitions: `ready→dispatched` and `dispatched→delivered`. Validates ownership via `driverId`. Uses shared `updateDeliveryOrderStatus` helper |
+
+**Status transition rules (enforced server-side):**
+- Driver can only act on orders where `driverId === me`
+- `dispatched` requires current status `ready`
+- `delivered` requires current status `dispatched`
+- Any other transition returns 400
+
+**Shared helper `src/lib/delivery/status.ts`:**
+`updateDeliveryOrderStatus({ orderId, status, reason?, expectedUnitId? })` — single source of truth for status changes. Used by both `/api/v1/admin/delivery/orders/[id]/status` and `/api/v1/driver/orders/[id]/status`. Handles timestamps, driver stats increment, virtual session closing (when cancelled), socket emits, and WhatsApp customer notification.
 
 ### Online payment (planned)
 

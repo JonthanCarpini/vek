@@ -5,6 +5,7 @@ import { NextRequest } from 'next/server';
 const STAFF_SECRET = process.env.JWT_SECRET || 'dev-staff-secret-change-me-please-32c';
 const SESSION_SECRET = process.env.JWT_SESSION_SECRET || 'dev-session-secret-change-me-32chars';
 const CUSTOMER_SECRET = process.env.JWT_CUSTOMER_SECRET || 'dev-customer-secret-change-me-32chars';
+const DRIVER_SECRET = process.env.JWT_DRIVER_SECRET || 'dev-driver-secret-change-me-32chars-ok';
 
 export type StaffRole = 'super_admin' | 'admin' | 'manager' | 'waiter' | 'kitchen' | 'cashier';
 
@@ -95,4 +96,31 @@ function extractCustomerToken(req: NextRequest): string | null {
 export function getCustomerFromRequest(req: NextRequest): CustomerPayload | null {
   const t = extractCustomerToken(req);
   return t ? verifyCustomer(t) : null;
+}
+
+// ========== Driver (Motoboy) ==========
+
+export interface DriverPayload {
+  sub: string; // driver id
+  uid: string; // unit id
+  name: string;
+  phone: string;
+}
+
+export function signDriver(p: DriverPayload, expiresIn: string = '30d') {
+  return jwt.sign(p, DRIVER_SECRET, { expiresIn } as jwt.SignOptions);
+}
+export function verifyDriver(token: string): DriverPayload | null {
+  try { return jwt.verify(token, DRIVER_SECRET) as DriverPayload; } catch { return null; }
+}
+
+function extractDriverToken(req: NextRequest): string | null {
+  const h = req.headers.get('x-driver-token') || '';
+  if (h) return h;
+  return req.cookies.get('md_driver')?.value || null;
+}
+
+export function getDriverFromRequest(req: NextRequest): DriverPayload | null {
+  const t = extractDriverToken(req);
+  return t ? verifyDriver(t) : null;
 }
