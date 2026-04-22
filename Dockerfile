@@ -61,6 +61,7 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/server.js ./
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/next.config.js ./
+COPY --from=builder /app/tsconfig.json ./
 RUN mkdir -p /app/public/uploads
 
 # Pasta para as sessões do WhatsApp
