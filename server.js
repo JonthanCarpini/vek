@@ -1,7 +1,9 @@
 // Servidor customizado Next.js + Socket.io
 // Usa um único processo para servir Next e WebSocket na mesma porta.
+console.log('[Server] Iniciando processo...');
 require('ts-node/register');
 require('tsconfig-paths/register');
+console.log('[Server] ts-node registrado.');
 const { createServer } = require('http');
 const { parse } = require('url');
 const next = require('next');
