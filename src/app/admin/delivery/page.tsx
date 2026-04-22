@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { apiFetch } from '@/lib/staff-client';
 import ConfigTab from './_components/ConfigTab';
 import OrdersTab from './_components/OrdersTab';
 
@@ -18,11 +19,8 @@ export default function AdminDeliveryPage() {
 
   const loadCounts = async () => {
     try {
-      const res = await fetch('/api/v1/admin/delivery/orders?status=all', { credentials: 'include' });
-      if (res.ok) {
-        const body = await res.json();
-        setCounts(body.data?.counts || {});
-      }
+      const data = await apiFetch('/api/v1/admin/delivery/orders?status=all');
+      setCounts(data?.counts || {});
     } catch {}
   };
 

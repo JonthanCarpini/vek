@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { apiFetch } from '@/lib/staff-client';
 
 export default function ConfigTab() {
   const [config, setConfig] = useState<any>(null);
@@ -13,9 +14,10 @@ export default function ConfigTab() {
   const load = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/v1/admin/delivery', { credentials: 'include' });
-      const body = await res.json();
-      if (res.ok) setConfig(body.data);
+      const data = await apiFetch('/api/v1/admin/delivery');
+      setConfig(data);
+    } catch (e: any) {
+      setToast(e.message || 'Erro ao carregar');
     } finally { setLoading(false); }
   };
 
@@ -42,20 +44,15 @@ export default function ConfigTab() {
       };
       if (newApiKey) payload.googleMapsApiKey = newApiKey;
 
-      const res = await fetch('/api/v1/admin/delivery', {
+      await apiFetch('/api/v1/admin/delivery', {
         method: 'PATCH',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      const body = await res.json();
-      if (!res.ok) {
-        setToast(body.error || 'Erro ao salvar');
-      } else {
-        setToast('✅ Configurações salvas');
-        setNewApiKey('');
-        load();
-      }
+      setToast('✅ Configurações salvas');
+      setNewApiKey('');
+      load();
+    } catch (e: any) {
+      setToast(e.message || 'Erro ao salvar');
     } finally {
       setSaving(false);
       setTimeout(() => setToast(null), 4000);

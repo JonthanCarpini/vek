@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Plus, Edit, Trash2, Power, Check } from 'lucide-react';
+import { apiFetch } from '@/lib/staff-client';
 
 const VEHICLE_LABEL: Record<string, string> = {
   moto: '🏍️ Moto', bike: '🚲 Bike', carro: '🚗 Carro', pe: '🚶 A pé',
@@ -16,27 +17,28 @@ export default function AdminDriversPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/v1/admin/drivers', { credentials: 'include' });
-      const body = await res.json();
-      if (res.ok) setDrivers(body.data.drivers);
-    } finally { setLoading(false); }
+      const data = await apiFetch('/api/v1/admin/drivers');
+      setDrivers(data.drivers || []);
+    } catch {} finally { setLoading(false); }
   };
 
   useEffect(() => { load(); }, []);
 
   const handleDelete = async (id: string) => {
     if (!confirm('Inativar este motoboy? O histórico será preservado.')) return;
-    await fetch(`/api/v1/admin/drivers/${id}`, { method: 'DELETE', credentials: 'include' });
+    try {
+      await apiFetch(`/api/v1/admin/drivers/${id}`, { method: 'DELETE' });
+    } catch (e: any) { alert(e.message); }
     load();
   };
 
   const handleToggleActive = async (id: string, active: boolean) => {
-    await fetch(`/api/v1/admin/drivers/${id}`, {
-      method: 'PATCH',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ active: !active }),
-    });
+    try {
+      await apiFetch(`/api/v1/admin/drivers/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ active: !active }),
+      });
+    } catch (e: any) { alert(e.message); }
     load();
   };
 
@@ -167,18 +169,12 @@ function DriverForm({
       };
       if (form.pin) payload.pin = form.pin;
 
-      const res = await fetch(url, {
-        method,
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const body = await res.json();
-      if (!res.ok) {
-        setError(body.error || 'Erro ao salvar');
-        return;
+      try {
+        await apiFetch(url, { method, body: JSON.stringify(payload) });
+        onSaved();
+      } catch (e: any) {
+        setError(e.message || 'Erro ao salvar');
       }
-      onSaved();
     } finally { setSaving(false); }
   };
 

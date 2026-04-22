@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { apiFetch } from '@/lib/staff-client';
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   received: { label: 'Recebido', color: 'bg-blue-100 text-blue-700' },
@@ -32,21 +33,15 @@ export default function OrdersTab() {
   const loadOrders = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/v1/admin/delivery/orders?status=${filter}`, {
-        credentials: 'include',
-      });
-      const body = await res.json();
-      if (res.ok) setOrders(body.data.orders);
-    } finally { setLoading(false); }
+      const data = await apiFetch(`/api/v1/admin/delivery/orders?status=${filter}`);
+      setOrders(data.orders || []);
+    } catch {} finally { setLoading(false); }
   };
 
   const loadDrivers = async () => {
     try {
-      const res = await fetch('/api/v1/admin/drivers?active=true', { credentials: 'include' });
-      if (res.ok) {
-        const body = await res.json();
-        setDrivers(body.data?.drivers || []);
-      }
+      const data = await apiFetch('/api/v1/admin/drivers?active=true');
+      setDrivers(data?.drivers || []);
     } catch {}
   };
 
@@ -58,36 +53,32 @@ export default function OrdersTab() {
   }, [filter]);
 
   const updateStatus = async (id: string, status: string) => {
-    if (status === 'cancelled') {
-      const reason = prompt('Motivo do cancelamento?');
-      if (reason === null) return;
-      const res = await fetch(`/api/v1/admin/delivery/orders/${id}/status`, {
+    try {
+      const body: any = { status };
+      if (status === 'cancelled') {
+        const reason = prompt('Motivo do cancelamento?');
+        if (reason === null) return;
+        body.reason = reason;
+      }
+      await apiFetch(`/api/v1/admin/delivery/orders/${id}/status`, {
         method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status, reason }),
+        body: JSON.stringify(body),
       });
-      if (!res.ok) alert('Falha ao cancelar');
-    } else {
-      const res = await fetch(`/api/v1/admin/delivery/orders/${id}/status`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
-      });
-      if (!res.ok) alert('Falha ao atualizar');
+    } catch (e: any) {
+      alert(e.message || 'Falha ao atualizar');
     }
     loadOrders();
   };
 
   const assignDriver = async (id: string, driverId: string | null) => {
-    const res = await fetch(`/api/v1/admin/delivery/orders/${id}/assign-driver`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ driverId }),
-    });
-    if (!res.ok) alert('Falha ao atribuir motoboy');
+    try {
+      await apiFetch(`/api/v1/admin/delivery/orders/${id}/assign-driver`, {
+        method: 'POST',
+        body: JSON.stringify({ driverId }),
+      });
+    } catch (e: any) {
+      alert(e.message || 'Falha ao atribuir motoboy');
+    }
     loadOrders();
   };
 
