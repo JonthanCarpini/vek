@@ -34,19 +34,19 @@ export default function AdminDeliveryPage() {
   return (
     <div className="p-4 md:p-6 max-w-6xl mx-auto">
       <header className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">🚴 Delivery</h1>
-        <p className="text-sm text-gray-500 mt-1">
+        <h1 className="text-2xl font-bold">🚴 Delivery</h1>
+        <p className="text-sm text-gray-400 mt-1">
           Gerencie pedidos, configurações e taxa de entrega
         </p>
       </header>
 
-      <div className="flex gap-1 border-b mb-6">
+      <div className="flex gap-1 border-b border-gray-800 mb-6">
         <button
           onClick={() => setTab('orders')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition ${
+          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition ${
             tab === 'orders'
-              ? 'border-orange-500 text-orange-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
+              ? 'border-orange-500 text-orange-400'
+              : 'border-transparent text-gray-400 hover:text-gray-200'
           }`}
         >
           Pedidos {activeCount > 0 && (
@@ -57,10 +57,10 @@ export default function AdminDeliveryPage() {
         </button>
         <button
           onClick={() => setTab('config')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition ${
+          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition ${
             tab === 'config'
-              ? 'border-orange-500 text-orange-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
+              ? 'border-orange-500 text-orange-400'
+              : 'border-transparent text-gray-400 hover:text-gray-200'
           }`}
         >
           Configuração

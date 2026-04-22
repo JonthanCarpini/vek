@@ -47,20 +47,20 @@ export default function AdminDriversPage() {
       <header className="mb-6 flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold">🏍️ Entregadores</h1>
-          <p className="text-sm text-gray-500 mt-1">Motoboys da unidade</p>
+          <p className="text-sm text-gray-400 mt-1">Motoboys da unidade</p>
         </div>
         <button
           onClick={() => { setEditing(null); setShowForm(true); }}
-          className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+          className="btn btn-primary flex items-center gap-2"
         >
           <Plus className="w-4 h-4" /> Novo motoboy
         </button>
       </header>
 
       {loading ? (
-        <div className="text-center text-gray-500 py-10">Carregando...</div>
+        <div className="text-center text-gray-400 py-10">Carregando...</div>
       ) : drivers.length === 0 ? (
-        <div className="text-center text-gray-500 py-16 bg-white rounded-lg border">
+        <div className="text-center text-gray-400 py-16 card">
           Nenhum motoboy cadastrado. Adicione o primeiro clicando em &quot;Novo motoboy&quot;.
         </div>
       ) : (
@@ -68,28 +68,28 @@ export default function AdminDriversPage() {
           {drivers.map((d) => (
             <div
               key={d.id}
-              className={`bg-white rounded-lg border p-4 flex flex-wrap items-center gap-3 ${
+              className={`card p-4 flex flex-wrap items-center gap-3 ${
                 !d.active ? 'opacity-60' : ''
               }`}
             >
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-semibold text-gray-800">{d.name}</span>
-                  <span className="text-xs px-2 py-0.5 bg-gray-100 rounded">
+                  <span className="font-semibold">{d.name}</span>
+                  <span className="text-xs px-2 py-0.5 bg-gray-800 text-gray-300 rounded">
                     {VEHICLE_LABEL[d.vehicle] || d.vehicle}
                   </span>
                   {d.hasPin && (
-                    <span className="text-xs px-2 py-0.5 bg-blue-50 text-blue-700 rounded">
+                    <span className="text-xs px-2 py-0.5 bg-blue-600/20 text-blue-400 rounded">
                       🔐 PIN
                     </span>
                   )}
                   {!d.active && (
-                    <span className="text-xs px-2 py-0.5 bg-red-50 text-red-700 rounded">
+                    <span className="text-xs px-2 py-0.5 bg-red-600/20 text-red-400 rounded">
                       Inativo
                     </span>
                   )}
                 </div>
-                <div className="text-sm text-gray-600 mt-0.5">
+                <div className="text-sm text-gray-400 mt-0.5">
                   {d.phone}
                   {d.licensePlate && ` • ${d.licensePlate}`}
                   {' • '}
@@ -100,21 +100,21 @@ export default function AdminDriversPage() {
                 <button
                   onClick={() => handleToggleActive(d.id, d.active)}
                   title={d.active ? 'Inativar' : 'Ativar'}
-                  className="p-2 hover:bg-gray-100 rounded"
+                  className="p-2 hover:bg-white/10 rounded"
                 >
-                  <Power className={`w-4 h-4 ${d.active ? 'text-green-600' : 'text-gray-400'}`} />
+                  <Power className={`w-4 h-4 ${d.active ? 'text-green-400' : 'text-gray-500'}`} />
                 </button>
                 <button
                   onClick={() => { setEditing(d); setShowForm(true); }}
                   title="Editar"
-                  className="p-2 hover:bg-gray-100 rounded text-gray-600"
+                  className="p-2 hover:bg-white/10 rounded text-gray-300"
                 >
                   <Edit className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => handleDelete(d.id)}
                   title="Excluir"
-                  className="p-2 hover:bg-red-50 rounded text-red-500"
+                  className="p-2 hover:bg-red-600/20 rounded text-red-400"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -179,37 +179,37 @@ function DriverForm({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="p-5 border-b">
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="card w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="p-5 border-b border-[var(--border)]">
           <h2 className="text-lg font-bold">{driver ? 'Editar motoboy' : 'Novo motoboy'}</h2>
         </div>
         <div className="p-5 space-y-3">
           <div>
-            <label className="text-sm text-gray-600 mb-1 block">Nome completo</label>
+            <label className="label">Nome completo</label>
             <input
               type="text"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="w-full px-3 py-2 border rounded-lg"
+              className="input w-full"
             />
           </div>
           <div>
-            <label className="text-sm text-gray-600 mb-1 block">Telefone (WhatsApp)</label>
+            <label className="label">Telefone (WhatsApp)</label>
             <input
               type="tel"
               value={form.phone}
               onChange={(e) => setForm({ ...form, phone: e.target.value })}
               placeholder="(11) 99999-9999"
-              className="w-full px-3 py-2 border rounded-lg"
+              className="input w-full"
             />
           </div>
           <div>
-            <label className="text-sm text-gray-600 mb-1 block">Veículo</label>
+            <label className="label">Veículo</label>
             <select
               value={form.vehicle}
               onChange={(e) => setForm({ ...form, vehicle: e.target.value })}
-              className="w-full px-3 py-2 border rounded-lg"
+              className="input w-full"
             >
               <option value="moto">Moto</option>
               <option value="bike">Bicicleta</option>
@@ -218,17 +218,17 @@ function DriverForm({
             </select>
           </div>
           <div>
-            <label className="text-sm text-gray-600 mb-1 block">Placa (opcional)</label>
+            <label className="label">Placa (opcional)</label>
             <input
               type="text"
               value={form.licensePlate}
               onChange={(e) => setForm({ ...form, licensePlate: e.target.value.toUpperCase() })}
               placeholder="ABC-1234"
-              className="w-full px-3 py-2 border rounded-lg"
+              className="input w-full"
             />
           </div>
           <div>
-            <label className="text-sm text-gray-600 mb-1 block">
+            <label className="label">
               PIN de acesso (4-6 dígitos){driver && ' — deixe em branco para manter atual'}
             </label>
             <input
@@ -238,26 +238,26 @@ function DriverForm({
               value={form.pin}
               onChange={(e) => setForm({ ...form, pin: e.target.value.replace(/\D/g, '') })}
               placeholder="Ex: 1234"
-              className="w-full px-3 py-2 border rounded-lg"
+              className="input w-full"
             />
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-gray-400 mt-1">
               Usado para o motoboy acessar a área /driver
             </p>
           </div>
-          {error && <div className="text-sm text-red-600 bg-red-50 p-2 rounded">{error}</div>}
+          {error && <div className="text-sm text-red-400 bg-red-600/10 border border-red-500/30 p-2 rounded">{error}</div>}
         </div>
-        <div className="p-5 border-t flex gap-2">
+        <div className="p-5 border-t border-[var(--border)] flex gap-2">
           <button
             onClick={onClose}
             disabled={saving}
-            className="flex-1 py-2 border rounded-lg hover:bg-gray-50"
+            className="btn btn-ghost flex-1"
           >
             Cancelar
           </button>
           <button
             onClick={handleSubmit}
             disabled={saving}
-            className="flex-1 py-2 bg-orange-500 hover:bg-orange-600 disabled:bg-gray-300 text-white rounded-lg font-semibold flex items-center justify-center gap-2"
+            className="btn btn-primary flex-1 disabled:opacity-50"
           >
             {saving ? 'Salvando...' : <><Check className="w-4 h-4" /> Salvar</>}
           </button>
