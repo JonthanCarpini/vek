@@ -31,6 +31,7 @@ app.prepare().then(() => {
   // Expor globalmente para que route handlers possam emitir
   globalThis.__io = io;
 
+  console.log('[Server] Importando serviços de WhatsApp e Prisma...');
   // Inicializar WhatsApp para unidades habilitadas
   const { whatsappService } = require('./src/lib/whatsapp');
   const { prisma } = require('./src/lib/prisma');
