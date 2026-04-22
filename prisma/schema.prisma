@@ -8,15 +8,15 @@ datasource db {
 }
 
 model Tenant {
-  id        String   @id @default(cuid())
-  name      String
-  slug      String   @unique
+  id                String   @id @default(cuid())
+  name              String
+  slug              String   @unique
   // Credenciais globais iFood (uma app por tenant, gerencia N merchants/Units)
   ifoodClientId     String?
-  ifoodClientSecret String? @db.Text
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  units     Unit[]
+  ifoodClientSecret String?  @db.Text
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  units             Unit[]
 }
 
 model Unit {
@@ -50,25 +50,44 @@ model Unit {
   ifoodAutoConfirm      Boolean   @default(false)
   ifoodStoreStatus      String    @default("unknown") // unknown | open | closed | paused
   ifoodLastPollAt       DateTime?
+  // Delivery próprio
+  deliveryEnabled       Boolean   @default(false)
+  takeoutEnabled        Boolean   @default(false)
+  deliveryMinOrder      Decimal   @default(0) @db.Decimal(10, 2)
+  deliveryMaxRadiusKm   Decimal   @default(5) @db.Decimal(6, 2)
+  deliveryBaseFee       Decimal   @default(0) @db.Decimal(10, 2) // taxa fixa inicial
+  deliveryFeePerKm      Decimal   @default(2) @db.Decimal(10, 2) // R$ por km
+  deliveryFreeOver      Decimal?  @db.Decimal(10, 2) // pedido acima de X = frete grátis
+  deliveryPrepTimeMin   Int       @default(30) // minutos até ficar pronto
+  deliveryAvgTimeMin    Int       @default(20) // minutos médios de entrega
+  // Origem do restaurante para geocoding (lat/lng do endereço)
+  addressLat            Decimal?  @db.Decimal(10, 7)
+  addressLng            Decimal?  @db.Decimal(10, 7)
+  // Chave Google Maps (Geocoding API)
+  googleMapsApiKey      String?   @db.Text
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
-  tenant        Tenant          @relation(fields: [tenantId], references: [id])
-  users         User[]
-  tables        TableEntity[]
-  categories    Category[]
-  products      Product[]
-  orders        Order[]
-  sessions      TableSession[]
-  calls         Call[]
-  storeDays     StoreDay[]
-  businessHours BusinessHours[]
-  overrides     StoreOverride[]
-  ingredients   Ingredient[]
-  displayItems  DisplayItem[]
-  customers     Customer[]
-  ifoodEvents   IfoodEvent[]
-  ifoodTokens   IfoodToken[]
+  tenant            Tenant            @relation(fields: [tenantId], references: [id])
+  users             User[]
+  tables            TableEntity[]
+  categories        Category[]
+  products          Product[]
+  orders            Order[]
+  sessions          TableSession[]
+  calls             Call[]
+  storeDays         StoreDay[]
+  businessHours     BusinessHours[]
+  overrides         StoreOverride[]
+  ingredients       Ingredient[]
+  displayItems      DisplayItem[]
+  customers         Customer[]
+  ifoodEvents       IfoodEvent[]
+  ifoodTokens       IfoodToken[]
+  drivers           Driver[]
+  deliveryAddresses DeliveryAddress[]
+  otpCodes          OtpCode[]
+  geocodeCache      GeocodeCache[]
 
   @@index([tenantId])
 }
@@ -285,41 +304,63 @@ model ProductIngredient {
 }
 
 model Order {
-  id              String    @id @default(cuid())
-  sessionId       String
-  unitId          String
-  tableId         String
-  sequenceNumber  Int
-  status          String    @default("received") // received | accepted | preparing | ready | delivered | cancelled
-  priority        Int       @default(0)
-  subtotal        Decimal   @db.Decimal(12, 2)
-  serviceFee      Decimal   @default(0) @db.Decimal(12, 2)
-  total           Decimal   @db.Decimal(12, 2)
-  notes           String?   @db.Text
-  acceptedAt      DateTime?
-  readyAt         DateTime?
-  deliveredAt     DateTime?
+  id                  String    @id @default(cuid())
+  sessionId           String
+  unitId              String
+  tableId             String
+  sequenceNumber      Int
+  status              String    @default("received") // received | accepted | preparing | ready | dispatched | delivered | cancelled
+  priority            Int       @default(0)
+  subtotal            Decimal   @db.Decimal(12, 2)
+  serviceFee          Decimal   @default(0) @db.Decimal(12, 2)
+  deliveryFee         Decimal   @default(0) @db.Decimal(12, 2)
+  total               Decimal   @db.Decimal(12, 2)
+  notes               String?   @db.Text
+  acceptedAt          DateTime?
+  readyAt             DateTime?
+  dispatchedAt        DateTime?
+  deliveredAt         DateTime?
   // Canal de origem do pedido
-  channel         String    @default("dine_in") // dine_in | ifood | delivery
+  channel             String    @default("dine_in") // dine_in | ifood | delivery
+  orderType           String    @default("dine_in") // dine_in | delivery | takeout
   // Dados iFood (quando channel=ifood)
-  ifoodOrderId    String?   @unique
-  ifoodDisplayId  String? // id curto exibido ao cliente iFood (ex: AB12)
-  ifoodStatus     String? // status retornado pelo iFood (PLACED, CONFIRMED, DISPATCHED, etc.)
-  customerName    String?
-  customerPhone   String?
-  deliveryAddress String?   @db.Text
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  ifoodOrderId        String?   @unique
+  ifoodDisplayId      String? // id curto exibido ao cliente iFood (ex: AB12)
+  ifoodStatus         String? // status retornado pelo iFood (PLACED, CONFIRMED, DISPATCHED, etc.)
+  // Dados cliente (delivery/ifood)
+  customerId          String?
+  customerName        String?
+  customerPhone       String?
+  deliveryAddress     String?   @db.Text
+  customerLat         Decimal?  @db.Decimal(10, 7)
+  customerLng         Decimal?  @db.Decimal(10, 7)
+  distanceKm          Decimal?  @db.Decimal(8, 3)
+  estimatedDeliveryAt DateTime?
+  // Motoboy
+  driverId            String?
+  // Pagamento
+  paymentStatus       String    @default("pending") // pending | paid | failed | refunded
+  paymentMethod       String? // cash | credit | debit | pix | online
+  paymentExternalId   String? // id do gateway (Asaas/MP)
+  paymentPaidAt       DateTime?
+  changeFor           Decimal?  @db.Decimal(10, 2) // troco para (cash)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
-  session TableSession @relation(fields: [sessionId], references: [id])
-  unit    Unit         @relation(fields: [unitId], references: [id])
-  table   TableEntity  @relation(fields: [tableId], references: [id])
-  items   OrderItem[]
+  session  TableSession @relation(fields: [sessionId], references: [id])
+  unit     Unit         @relation(fields: [unitId], references: [id])
+  table    TableEntity  @relation(fields: [tableId], references: [id])
+  customer Customer?    @relation(fields: [customerId], references: [id])
+  driver   Driver?      @relation(fields: [driverId], references: [id])
+  items    OrderItem[]
 
   @@index([unitId, status, createdAt])
   @@index([sessionId])
   @@index([channel, unitId])
   @@index([ifoodOrderId])
+  @@index([customerId])
+  @@index([driverId, status])
+  @@index([paymentExternalId])
 }
 
 model OrderItem {
@@ -365,24 +406,117 @@ model Call {
 }
 
 model Customer {
-  id          String   @id @default(cuid())
-  unitId      String
-  name        String
-  phone       String
-  email       String?
-  notes       String?  @db.Text
-  firstSeenAt DateTime @default(now())
-  lastSeenAt  DateTime @default(now())
-  totalSpent  Decimal  @default(0) @db.Decimal(12, 2)
-  totalOrders Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            String    @id @default(cuid())
+  unitId        String
+  name          String
+  phone         String
+  email         String?
+  photoUrl      String?
+  notes         String?   @db.Text
+  // Autenticação delivery
+  phoneVerified Boolean   @default(false)
+  lastLoginAt   DateTime?
+  // Estatísticas
+  firstSeenAt   DateTime  @default(now())
+  lastSeenAt    DateTime  @default(now())
+  totalSpent    Decimal   @default(0) @db.Decimal(12, 2)
+  totalOrders   Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  unit     Unit           @relation(fields: [unitId], references: [id])
-  sessions TableSession[]
+  unit      Unit              @relation(fields: [unitId], references: [id])
+  sessions  TableSession[]
+  orders    Order[]
+  addresses DeliveryAddress[]
 
   @@unique([unitId, phone])
   @@index([unitId, name])
+}
+
+// === DELIVERY ===
+
+model Driver {
+  id              String    @id @default(cuid())
+  unitId          String
+  name            String
+  phone           String
+  vehicle         String    @default("moto") // moto | bike | carro | pe
+  licensePlate    String?
+  photoUrl        String?
+  active          Boolean   @default(true)
+  // Login via PIN (OTP WhatsApp opcional)
+  pinHash         String?
+  lastLoginAt     DateTime?
+  // Estatísticas
+  totalDeliveries Int       @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  unit   Unit    @relation(fields: [unitId], references: [id])
+  orders Order[]
+
+  @@unique([unitId, phone])
+  @@index([unitId, active])
+}
+
+model DeliveryAddress {
+  id           String   @id @default(cuid())
+  unitId       String
+  customerId   String
+  label        String   @default("Casa") // Casa | Trabalho | Outro
+  street       String
+  number       String
+  complement   String?
+  reference    String? // ponto de referência
+  neighborhood String
+  city         String
+  state        String   @default("")
+  zipCode      String?
+  lat          Decimal? @db.Decimal(10, 7)
+  lng          Decimal? @db.Decimal(10, 7)
+  isDefault    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  unit     Unit     @relation(fields: [unitId], references: [id])
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@index([unitId, customerId])
+}
+
+model OtpCode {
+  id        String   @id @default(cuid())
+  unitId    String
+  phone     String // E.164 ex: 5511999999999
+  code      String // 6 dígitos
+  purpose   String   @default("customer_login") // customer_login | driver_login
+  attempts  Int      @default(0)
+  consumed  Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  unit Unit @relation(fields: [unitId], references: [id])
+
+  @@index([unitId, phone, purpose])
+  @@index([expiresAt])
+}
+
+/// Cache de geocoding para evitar chamadas repetidas à API Google Maps.
+model GeocodeCache {
+  id        String   @id @default(cuid())
+  unitId    String
+  key       String // hash normalizado do endereço (CEP+numero ou rua+num+bairro)
+  address   String   @db.Text
+  lat       Decimal  @db.Decimal(10, 7)
+  lng       Decimal  @db.Decimal(10, 7)
+  formatted String?  @db.Text
+  createdAt DateTime @default(now())
+
+  unit Unit @relation(fields: [unitId], references: [id])
+
+  @@unique([unitId, key])
+  @@index([createdAt])
 }
 
 model DisplayItem {
