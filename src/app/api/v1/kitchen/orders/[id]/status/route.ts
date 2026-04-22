@@ -4,6 +4,7 @@ import { ok, notFound, parseBody, serverError } from '@/lib/api';
 import { orderStatusSchema } from '@/lib/validators';
 import { requireStaff, ROLES } from '@/lib/guard';
 import { emitToKitchen, emitToSession, emitToDashboard, SocketEvents } from '@/lib/socket';
+import { sendOrderReadyWhatsApp } from '@/lib/orders';
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -41,6 +42,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         tableNumber: order.table?.number,
         readyAt: now,
       });
+      // Notifica o cliente via WhatsApp (async, sem bloquear a resposta)
+      sendOrderReadyWhatsApp(order.id).catch(err =>
+        console.error('[WhatsApp] Falha ao notificar pedido pronto:', err)
+      );
     }
 
     return ok({ order });
