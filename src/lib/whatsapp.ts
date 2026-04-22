@@ -46,7 +46,7 @@ class WhatsAppService {
       console.log(`[WhatsApp] Cliente pronto para unidade: ${unitId}`);
       await (prisma.unit as any).update({
         where: { id: unitId },
-        data: { whatsappStatus: 'ready', whatsappSession: null }
+        data: { whatsappStatus: 'connected', whatsappSession: null }
       });
 
       if (globalThis.__io) {
