@@ -23,6 +23,7 @@ model Unit {
   id                    String    @id @default(cuid())
   tenantId              String
   name                  String
+  slug                  String?   @unique // slug para URLs públicas (delivery)
   address               String?
   phone                 String?
   whatsapp              String?

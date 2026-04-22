@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { getStaffFromRequest, StaffRole, StaffPayload } from './auth';
+import { getStaffFromRequest, getCustomerFromRequest, StaffRole, StaffPayload, CustomerPayload } from './auth';
 import { forbidden, unauthorized } from './api';
 
 export function requireStaff(req: NextRequest, roles?: StaffRole[]):
@@ -9,6 +9,14 @@ export function requireStaff(req: NextRequest, roles?: StaffRole[]):
   if (!staff) return { ok: false, res: unauthorized() };
   if (roles && !roles.includes(staff.role)) return { ok: false, res: forbidden() };
   return { ok: true, staff };
+}
+
+export function requireCustomer(req: NextRequest):
+  | { ok: true; customer: CustomerPayload }
+  | { ok: false; res: Response } {
+  const customer = getCustomerFromRequest(req);
+  if (!customer) return { ok: false, res: unauthorized('Login necessário') };
+  return { ok: true, customer };
 }
 
 export const ROLES = {

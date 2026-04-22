@@ -4,6 +4,7 @@ import { NextRequest } from 'next/server';
 
 const STAFF_SECRET = process.env.JWT_SECRET || 'dev-staff-secret-change-me-please-32c';
 const SESSION_SECRET = process.env.JWT_SESSION_SECRET || 'dev-session-secret-change-me-32chars';
+const CUSTOMER_SECRET = process.env.JWT_CUSTOMER_SECRET || 'dev-customer-secret-change-me-32chars';
 
 export type StaffRole = 'super_admin' | 'admin' | 'manager' | 'waiter' | 'kitchen' | 'cashier';
 
@@ -67,4 +68,31 @@ export function getSessionFromRequest(req: NextRequest): SessionPayload | null {
 
 export function hasRole(staff: StaffPayload | null, roles: StaffRole[]) {
   return !!staff && roles.includes(staff.role);
+}
+
+// ========== Customer (Delivery) ==========
+
+export interface CustomerPayload {
+  sub: string; // customer id
+  uid: string; // unit id
+  phone: string;
+  name: string;
+}
+
+export function signCustomer(p: CustomerPayload, expiresIn: string = '60d') {
+  return jwt.sign(p, CUSTOMER_SECRET, { expiresIn } as jwt.SignOptions);
+}
+export function verifyCustomer(token: string): CustomerPayload | null {
+  try { return jwt.verify(token, CUSTOMER_SECRET) as CustomerPayload; } catch { return null; }
+}
+
+function extractCustomerToken(req: NextRequest): string | null {
+  const h = req.headers.get('x-customer-token') || '';
+  if (h) return h;
+  return req.cookies.get('md_customer')?.value || null;
+}
+
+export function getCustomerFromRequest(req: NextRequest): CustomerPayload | null {
+  const t = extractCustomerToken(req);
+  return t ? verifyCustomer(t) : null;
 }
