@@ -51,6 +51,8 @@ const NAV_GROUPS: NavGroup[] = [
       { href: '/admin/settings', label: 'Configurações', icon: '⚙️', roles: ADMIN_FULL },
       { href: '/admin/whatsapp', label: 'WhatsApp', icon: '📱', roles: ['super_admin', 'admin'] },
       { href: '/admin/ifood', label: 'iFood', icon: '🛵', roles: ['super_admin', 'admin'] },
+      { href: '/admin/delivery', label: 'Delivery', icon: '🚴', roles: ['super_admin', 'admin', 'manager'] },
+      { href: '/admin/drivers', label: 'Entregadores', icon: '🏍️', roles: ['super_admin', 'admin', 'manager'] },
     ]
   }
 ];
