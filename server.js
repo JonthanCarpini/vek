@@ -11,10 +11,13 @@ const { Server } = require('socket.io');
 
 const dev = process.env.NODE_ENV !== 'production';
 const port = parseInt(process.env.PORT || '3000', 10);
+console.log(`[Server] Iniciando Next.js (dev=${dev})...`);
 const app = next({ dev });
 const handle = app.getRequestHandler();
 
+console.log('[Server] Preparando app...');
 app.prepare().then(() => {
+  console.log('[Server] App preparado. Criando servidor HTTP...');
   const httpServer = createServer((req, res) => {
     const parsedUrl = parse(req.url, true);
     handle(req, res, parsedUrl);
