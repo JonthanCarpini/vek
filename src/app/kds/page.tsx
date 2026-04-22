@@ -74,12 +74,24 @@ export default function KDSPage() {
     { order: any; late: boolean; elapsed: string; onAdvance: () => void; nextLabel: string }) {
     const [open, setOpen] = useState(false);
     return (
-      <div className={`card p-3 ${late ? 'border-red-500' : ''}`}>
+      <div className={`card p-3 ${late ? 'border-red-500' : ''} ${order.channel === 'ifood' ? 'border-l-4 border-l-red-500' : ''}`}>
         <div className="flex justify-between text-sm">
-          <span className="font-bold">#{order.sequenceNumber} • Mesa {order.table?.number}</span>
+          <span className="font-bold flex items-center gap-2">
+            #{order.sequenceNumber}
+            {order.channel === 'ifood' ? (
+              <span className="text-xs bg-red-600/20 text-red-400 px-2 py-0.5 rounded-full">🛵 iFood</span>
+            ) : (
+              <span>• Mesa {order.table?.number}</span>
+            )}
+          </span>
           <span className={late ? 'text-red-400' : 'text-gray-400'}>{elapsed}</span>
         </div>
-        <div className="text-xs text-gray-400 mb-2">{order.session?.customerName}</div>
+        <div className="text-xs text-gray-400 mb-2">
+          {order.channel === 'ifood' ? (order.customerName || 'iFood') : order.session?.customerName}
+          {order.channel === 'ifood' && order.ifoodDisplayId && (
+            <span className="ml-2 text-red-400">· {order.ifoodDisplayId}</span>
+          )}
+        </div>
         <ul className="text-sm mb-2 space-y-1">
           {order.items.map((i: any) => (
             <li key={i.id} className="border-l-2 border-brand-600/40 pl-2">

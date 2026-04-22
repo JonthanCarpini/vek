@@ -5,6 +5,7 @@ import { orderStatusSchema } from '@/lib/validators';
 import { requireStaff, ROLES } from '@/lib/guard';
 import { emitToKitchen, emitToSession, emitToDashboard, SocketEvents } from '@/lib/socket';
 import { sendOrderReadyWhatsApp } from '@/lib/orders';
+import { syncStatusToIfood } from '@/lib/ifood/actions';
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -47,6 +48,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         console.error('[WhatsApp] Falha ao notificar pedido pronto:', err)
       );
     }
+
+    // Sincroniza com iFood em segundo plano (se for pedido iFood)
+    syncStatusToIfood(order.id, status).catch(err =>
+      console.error('[iFood] Falha ao sincronizar status:', err)
+    );
 
     return ok({ order });
   } catch (e) { return serverError(e); }
