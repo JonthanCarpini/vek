@@ -12,9 +12,14 @@ export async function GET(req: NextRequest) {
     if (!unitId) return fail('unidade não encontrada');
 
     const unit = await prisma.unit.findUnique({
-      where: { id: unitId },
-      select: { whatsappEnabled: true, whatsappStatus: true, whatsappSession: true }
-    });
+      where: { id: g.staff.uid },
+      select: {
+        id: true,
+        whatsappEnabled: true,
+        whatsappStatus: true,
+        whatsappSession: true,
+      }
+    }) as any;
 
     return ok({ ...unit });
   } catch (e) { return serverError(e); }
@@ -30,9 +35,9 @@ export async function POST(req: NextRequest) {
     const { action, enabled } = await req.json();
 
     if (action === 'toggle') {
-      await prisma.unit.update({
-        where: { id: unitId },
-        data: { whatsappEnabled: !!enabled }
+      await (prisma.unit as any).update({
+        where: { id: g.staff.uid },
+        data: { whatsappEnabled: enabled }
       });
       if (enabled) {
         whatsappService.initialize(unitId);

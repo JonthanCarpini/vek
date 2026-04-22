@@ -2,13 +2,18 @@ import { Client, LocalAuth } from 'whatsapp-web.js';
 import { prisma } from './prisma';
 import QRCode from 'qrcode';
 
+// Declaração para evitar erro de tipagem no globalThis
+declare global {
+  var __io: any;
+}
+
 class WhatsAppService {
   private clients: Map<string, Client> = new Map();
 
   async initialize(unitId: string) {
     if (this.clients.has(unitId)) return;
 
-    const unit = await prisma.unit.findUnique({ where: { id: unitId } });
+    const unit = await prisma.unit.findUnique({ where: { id: unitId } }) as any;
     if (!unit || !unit.whatsappEnabled) return;
 
     const client = new Client({
@@ -26,7 +31,7 @@ class WhatsAppService {
     client.on('qr', async (qr) => {
       console.log(`[WhatsApp] QR Code gerado para unidade: ${unitId}`);
       const qrDataUrl = await QRCode.toDataURL(qr);
-      await prisma.unit.update({
+      await (prisma.unit as any).update({
         where: { id: unitId },
         data: { whatsappStatus: 'qr', whatsappSession: qrDataUrl }
       });
@@ -39,9 +44,9 @@ class WhatsAppService {
 
     client.on('ready', async () => {
       console.log(`[WhatsApp] Cliente pronto para unidade: ${unitId}`);
-      await prisma.unit.update({
+      await (prisma.unit as any).update({
         where: { id: unitId },
-        data: { whatsappStatus: 'connected', whatsappSession: null }
+        data: { whatsappStatus: 'ready', whatsappSession: null }
       });
 
       if (globalThis.__io) {
@@ -51,7 +56,7 @@ class WhatsAppService {
 
     client.on('disconnected', async (reason) => {
       console.log(`[WhatsApp] Cliente desconectado (${reason}) para unidade: ${unitId}`);
-      await prisma.unit.update({
+      await (prisma.unit as any).update({
         where: { id: unitId },
         data: { whatsappStatus: 'disconnected', whatsappSession: null }
       });
@@ -75,10 +80,10 @@ class WhatsAppService {
       await client.destroy();
       this.clients.delete(unitId);
     }
-    await prisma.unit.update({
-      where: { id: unitId },
-      data: { whatsappStatus: 'disconnected', whatsappSession: null }
-    });
+      await (prisma.unit as any).update({
+        where: { id: unitId },
+        data: { whatsappStatus: 'disconnected', whatsappSession: null }
+      });
   }
 
   async sendMessage(unitId: string, to: string, message: string) {

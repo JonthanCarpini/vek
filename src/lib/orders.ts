@@ -148,7 +148,7 @@ export async function createOrderFromItems(params: {
 async function sendOrderWhatsAppSummary(unitId: string, sessionId: string, order: any) {
   try {
     const [unit, session] = await Promise.all([
-      prisma.unit.findUnique({ where: { id: unitId } }),
+      prisma.unit.findUnique({ where: { id: unitId } }) as Promise<any>,
       prisma.tableSession.findUnique({ where: { id: sessionId } })
     ]);
 
