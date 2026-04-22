@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { emitToKitchen, emitToWaiters, emitToSession, emitToDashboard, SocketEvents } from '@/lib/socket';
+import { whatsappService } from '@/lib/whatsapp';
+import { formatBRL } from '@/lib/format';
 
 export type CreateOrderItemInput = {
   productId: string;
@@ -132,7 +134,55 @@ export async function createOrderFromItems(params: {
   emitToDashboard(unitId, SocketEvents.ORDER_CREATED, payload);
   emitToSession(sessionId, SocketEvents.ORDER_STATUS_CHANGED, payload);
 
+  // Envio de resumo via WhatsApp
+  sendOrderWhatsAppSummary(unitId, sessionId, order).catch(err => {
+    console.error('[WhatsApp] Falha ao enviar resumo automático:', err);
+  });
+
   return { ok: true, order: payload };
+}
+
+/**
+ * Formata e envia o resumo do pedido via WhatsApp para o cliente.
+ */
+async function sendOrderWhatsAppSummary(unitId: string, sessionId: string, order: any) {
+  try {
+    const [unit, session] = await Promise.all([
+      prisma.unit.findUnique({ where: { id: unitId } }),
+      prisma.tableSession.findUnique({ where: { id: sessionId } })
+    ]);
+
+    if (!unit?.whatsappEnabled || !session?.customerPhone) return;
+
+    const itemsList = order.items.map((i: any) => 
+      `• ${i.quantity}x ${i.name} (${formatBRL(i.totalPrice)})`
+    ).join('\n');
+
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || '';
+    const trackingLink = appUrl ? `\n\n*Acompanhe seu pedido aqui:* ${appUrl}/m/${sessionId}` : '';
+
+    const message = 
+`✅ *Pedido Confirmado - ${unit.name}*
+
+Olá, *${session.customerName}*! Seu pedido foi recebido com sucesso.
+
+📍 *Mesa:* ${order.table?.number || 'N/A'}
+🔢 *Pedido:* #${order.sequenceNumber}
+
+*Itens do Pedido:*
+${itemsList}
+
+💰 *Subtotal:* ${formatBRL(order.subtotal)}
+⚖️ *Taxa de Serviço:* ${formatBRL(order.serviceFee)}
+🏷️ *TOTAL:* ${formatBRL(order.total)}
+${trackingLink}
+
+Obrigado pela preferência! 🍔🍟`;
+
+    await whatsappService.sendMessage(unitId, session.customerPhone, message);
+  } catch (err) {
+    console.error('[WhatsApp] Erro ao processar resumo do pedido:', err);
+  }
 }
 
 /**

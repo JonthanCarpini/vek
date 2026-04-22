@@ -24,6 +24,23 @@ app.prepare().then(() => {
   // Expor globalmente para que route handlers possam emitir
   globalThis.__io = io;
 
+  // Inicializar WhatsApp para unidades habilitadas
+  const { whatsappService } = require('./src/lib/whatsapp');
+  const { prisma } = require('./src/lib/prisma');
+  
+  async function initWhatsApp() {
+    try {
+      const units = await prisma.unit.findMany({ where: { whatsappEnabled: true } });
+      console.log(`[WhatsApp] Inicializando ${units.length} unidades...`);
+      for (const unit of units) {
+        await whatsappService.initialize(unit.id);
+      }
+    } catch (err) {
+      console.error('[WhatsApp] Falha ao inicializar:', err);
+    }
+  }
+  initWhatsApp();
+
   io.on('connection', (socket) => {
     // O cliente diz em qual(is) room(s) quer entrar
     socket.on('join', (rooms) => {

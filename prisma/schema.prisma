@@ -23,6 +23,9 @@ model Unit {
   address    String?
   phone      String?
   whatsapp   String?
+  whatsappEnabled Boolean @default(false)
+  whatsappStatus String  @default("disconnected") // disconnected | qr | connected
+  whatsappSession String? @db.Text
   instagram  String?
   logoUrl    String?
   primaryColor String? @default("#ea580c")

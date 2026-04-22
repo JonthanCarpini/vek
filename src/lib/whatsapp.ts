@@ -1,0 +1,105 @@
+import { Client, LocalAuth } from 'whatsapp-web.js';
+import { prisma } from './prisma';
+import QRCode from 'qrcode';
+
+class WhatsAppService {
+  private clients: Map<string, Client> = new Map();
+
+  async initialize(unitId: string) {
+    if (this.clients.has(unitId)) return;
+
+    const unit = await prisma.unit.findUnique({ where: { id: unitId } });
+    if (!unit || !unit.whatsappEnabled) return;
+
+    const client = new Client({
+      authStrategy: new LocalAuth({ clientId: unitId }),
+      puppeteer: {
+        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        handleSIGINT: false,
+      }
+    });
+
+    client.on('qr', async (qr) => {
+      console.log(`[WhatsApp] QR Code gerado para unidade: ${unitId}`);
+      const qrDataUrl = await QRCode.toDataURL(qr);
+      await prisma.unit.update({
+        where: { id: unitId },
+        data: { whatsappStatus: 'qr', whatsappSession: qrDataUrl }
+      });
+      
+      // Notificar via socket se possível
+      if (globalThis.__io) {
+        globalThis.__io.to(`unit:${unitId}:dashboard`).emit('whatsapp.qr', { qrDataUrl });
+      }
+    });
+
+    client.on('ready', async () => {
+      console.log(`[WhatsApp] Cliente pronto para unidade: ${unitId}`);
+      await prisma.unit.update({
+        where: { id: unitId },
+        data: { whatsappStatus: 'connected', whatsappSession: null }
+      });
+
+      if (globalThis.__io) {
+        globalThis.__io.to(`unit:${unitId}:dashboard`).emit('whatsapp.status', { status: 'connected' });
+      }
+    });
+
+    client.on('disconnected', async (reason) => {
+      console.log(`[WhatsApp] Cliente desconectado (${reason}) para unidade: ${unitId}`);
+      await prisma.unit.update({
+        where: { id: unitId },
+        data: { whatsappStatus: 'disconnected', whatsappSession: null }
+      });
+      this.clients.delete(unitId);
+
+      if (globalThis.__io) {
+        globalThis.__io.to(`unit:${unitId}:dashboard`).emit('whatsapp.status', { status: 'disconnected' });
+      }
+    });
+
+    this.clients.set(unitId, client);
+    client.initialize().catch(err => {
+      console.error(`[WhatsApp] Erro ao inicializar unidade ${unitId}:`, err);
+    });
+  }
+
+  async disconnect(unitId: string) {
+    const client = this.clients.get(unitId);
+    if (client) {
+      await client.logout();
+      await client.destroy();
+      this.clients.delete(unitId);
+    }
+    await prisma.unit.update({
+      where: { id: unitId },
+      data: { whatsappStatus: 'disconnected', whatsappSession: null }
+    });
+  }
+
+  async sendMessage(unitId: string, to: string, message: string) {
+    const client = this.clients.get(unitId);
+    if (!client) {
+      // Tentar inicializar se estiver habilitado
+      await this.initialize(unitId);
+      const retryClient = this.clients.get(unitId);
+      if (!retryClient) return false;
+    }
+
+    try {
+      const formattedTo = to.replace(/\D/g, '');
+      const finalTo = formattedTo.startsWith('55') ? formattedTo : `55${formattedTo}`;
+      await client!.sendMessage(`${finalTo}@c.us`, message);
+      return true;
+    } catch (err) {
+      console.error(`[WhatsApp] Erro ao enviar mensagem para ${to}:`, err);
+      return false;
+    }
+  }
+
+  getClient(unitId: string) {
+    return this.clients.get(unitId);
+  }
+}
+
+export const whatsappService = new WhatsAppService();
