@@ -59,5 +59,42 @@ app.prepare().then(() => {
 
   httpServer.listen(port, () => {
     console.log(`[mesa-digital] pronto em http://localhost:${port}`);
+    startIfoodPolling(port);
   });
 });
+
+// Agendador simples para polling iFood via endpoint interno.
+// Usa fetch para http://localhost:<port>/api/internal/ifood/poll protegido pelo JWT_SECRET.
+function startIfoodPolling(port) {
+  const clientId = process.env.IFOOD_CLIENT_ID || '';
+  const clientSecret = process.env.IFOOD_CLIENT_SECRET || '';
+  if (!clientId || !clientSecret) {
+    console.log('[iFood] Polling desativado (credenciais ausentes).');
+    return;
+  }
+  const interval = parseInt(process.env.IFOOD_POLLING_INTERVAL_MS || '30000', 10);
+  const secret = process.env.JWT_SECRET || '';
+  const url = `http://127.0.0.1:${port}/api/internal/ifood/poll`;
+
+  console.log(`[iFood] Polling agendado a cada ${interval}ms via ${url}`);
+
+  let running = false;
+  setInterval(async () => {
+    if (running) return;
+    running = true;
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'x-internal-secret': secret },
+      });
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        console.error(`[iFood] Polling retornou ${res.status}: ${body.slice(0, 200)}`);
+      }
+    } catch (err) {
+      console.error('[iFood] Falha ao chamar endpoint de polling:', err?.message || err);
+    } finally {
+      running = false;
+    }
+  }, interval);
+}
