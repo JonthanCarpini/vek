@@ -11,6 +11,9 @@ model Tenant {
   id        String   @id @default(cuid())
   name      String
   slug      String   @unique
+  // Credenciais globais iFood (uma app por tenant, gerencia N merchants/Units)
+  ifoodClientId     String?
+  ifoodClientSecret String? @db.Text
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   units     Unit[]

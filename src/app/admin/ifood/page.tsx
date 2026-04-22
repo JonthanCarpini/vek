@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/staff-client';
 import {
   CheckCircle2, XCircle, Loader2, RefreshCw, Settings, Power, Store,
-  AlertTriangle, Package, Clock,
+  AlertTriangle, Package, Clock, KeyRound,
 } from 'lucide-react';
 import { formatBRL } from '@/lib/format';
 
@@ -25,9 +25,12 @@ export default function IfoodAdmin() {
   const [data, setData] = useState<IfoodConfigData | null>(null);
   const [orders, setOrders] = useState<any[]>([]);
   const [busy, setBusy] = useState(true);
-  const [tab, setTab] = useState<'config' | 'orders' | 'status'>('config');
+  const [tab, setTab] = useState<'credentials' | 'config' | 'orders' | 'status'>('credentials');
   const [merchantIdInput, setMerchantIdInput] = useState('');
   const [storeStatus, setStoreStatus] = useState<any>(null);
+  const [creds, setCreds] = useState<{ clientId: string; hasClientSecret: boolean; clientSecretHint: string } | null>(null);
+  const [credClientId, setCredClientId] = useState('');
+  const [credClientSecret, setCredClientSecret] = useState('');
 
   useEffect(() => { load(); }, []);
 
@@ -37,6 +40,19 @@ export default function IfoodAdmin() {
       const res = await apiFetch('/api/v1/admin/ifood');
       setData(res);
       if (res?.unit?.ifoodMerchantId) setMerchantIdInput(res.unit.ifoodMerchantId);
+
+      // Se já configurado, abre direto na config
+      if (res?.credentialsConfigured && tab === 'credentials') {
+        setTab('config');
+      }
+
+      // Carrega credenciais (se admin)
+      try {
+        const c = await apiFetch('/api/v1/admin/ifood/credentials');
+        setCreds(c);
+        setCredClientId(c.clientId || '');
+      } catch { /* ignora se não tiver permissão */ }
+
       if (res?.unit?.ifoodEnabled) {
         const ord = await apiFetch('/api/v1/admin/ifood/orders?limit=20');
         setOrders(ord.orders || []);
@@ -44,6 +60,42 @@ export default function IfoodAdmin() {
     } catch (e: any) {
       alert(e.message);
     } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveCredentials() {
+    if (!credClientId.trim()) return alert('Client ID é obrigatório');
+    if (!creds?.hasClientSecret && !credClientSecret.trim()) {
+      return alert('Client Secret é obrigatório na primeira configuração');
+    }
+    try {
+      setBusy(true);
+      const payload: any = { clientId: credClientId.trim() };
+      if (credClientSecret.trim()) payload.clientSecret = credClientSecret.trim();
+      await apiFetch('/api/v1/admin/ifood/credentials', {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      });
+      setCredClientSecret('');
+      await load();
+      alert('Credenciais salvas com sucesso!');
+    } catch (e: any) {
+      alert(e.message);
+      setBusy(false);
+    }
+  }
+
+  async function removeCredentials() {
+    if (!confirm('Remover as credenciais iFood? A integração será desativada.')) return;
+    try {
+      setBusy(true);
+      await apiFetch('/api/v1/admin/ifood/credentials', { method: 'DELETE' });
+      setCredClientId('');
+      setCredClientSecret('');
+      await load();
+    } catch (e: any) {
+      alert(e.message);
       setBusy(false);
     }
   }
@@ -141,12 +193,13 @@ export default function IfoodAdmin() {
       {!data?.credentialsConfigured && (
         <div className="card p-4 bg-amber-600/10 border-amber-600/20 flex items-start gap-3">
           <AlertTriangle className="text-amber-400 mt-1" />
-          <div>
+          <div className="flex-1">
             <h3 className="font-bold text-amber-300">Credenciais não configuradas</h3>
             <p className="text-sm text-gray-400">
-              Defina <code>IFOOD_CLIENT_ID</code> e <code>IFOOD_CLIENT_SECRET</code> no arquivo <code>.env</code> do servidor e reinicie a aplicação.
+              Configure <strong>Client ID</strong> e <strong>Client Secret</strong> na aba "Credenciais" abaixo para ativar a integração.
             </p>
           </div>
+          <button onClick={() => setTab('credentials')} className="btn btn-primary btn-sm">Configurar</button>
         </div>
       )}
 
@@ -161,10 +214,71 @@ export default function IfoodAdmin() {
 
       {/* Tabs */}
       <div className="flex gap-2 border-b border-gray-800">
-        <TabButton active={tab === 'config'} onClick={() => setTab('config')} icon={<Settings size={16} />} label="Configuração" />
+        <TabButton active={tab === 'credentials'} onClick={() => setTab('credentials')} icon={<KeyRound size={16} />} label="Credenciais" />
+        <TabButton active={tab === 'config'} onClick={() => setTab('config')} icon={<Settings size={16} />} label="Configuração" disabled={!data?.credentialsConfigured} />
         <TabButton active={tab === 'orders'} onClick={() => setTab('orders')} icon={<Package size={16} />} label="Pedidos" disabled={!enabled} />
         <TabButton active={tab === 'status'} onClick={() => setTab('status')} icon={<Store size={16} />} label="Status da Loja" disabled={!enabled} />
       </div>
+
+      {tab === 'credentials' && (
+        <section className="card p-6 space-y-4">
+          <div>
+            <h2 className="font-bold text-lg">Credenciais iFood</h2>
+            <p className="text-sm text-gray-400">
+              Obtenha em <a href="https://developer.ifood.com.br" target="_blank" rel="noopener noreferrer" className="text-brand-400 hover:underline">developer.ifood.com.br</a>, em <strong>Aplicações → Credenciais</strong>.
+            </p>
+          </div>
+
+          {creds?.hasClientSecret && (
+            <div className="card p-3 bg-green-600/10 border-green-600/20 flex items-center gap-3">
+              <CheckCircle2 className="text-green-400" size={20} />
+              <div className="text-sm flex-1">
+                Credenciais ativas. Secret atual: <code className="bg-gray-900 px-2 py-0.5 rounded text-xs">{creds.clientSecretHint}</code>
+              </div>
+            </div>
+          )}
+
+          <div>
+            <label className="label">Client ID</label>
+            <input
+              className="input"
+              value={credClientId}
+              onChange={(e) => setCredClientId(e.target.value)}
+              placeholder="ex: 4b6f8d0e-..."
+              disabled={busy}
+            />
+          </div>
+
+          <div>
+            <label className="label">
+              Client Secret {creds?.hasClientSecret && <span className="text-xs text-gray-500">(deixe vazio para manter o atual)</span>}
+            </label>
+            <input
+              type="password"
+              className="input font-mono"
+              value={credClientSecret}
+              onChange={(e) => setCredClientSecret(e.target.value)}
+              placeholder={creds?.hasClientSecret ? '•••••••••• (não alterar)' : 'Cole o Client Secret aqui'}
+              disabled={busy}
+              autoComplete="new-password"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              🔒 O secret é armazenado criptografado no banco e nunca é exibido novamente após salvar.
+            </p>
+          </div>
+
+          <div className="flex justify-between gap-2 pt-2 border-t border-gray-800">
+            {creds?.hasClientSecret ? (
+              <button onClick={removeCredentials} disabled={busy} className="btn bg-red-600/10 text-red-400 hover:bg-red-600/20">
+                Remover Credenciais
+              </button>
+            ) : <div />}
+            <button onClick={saveCredentials} disabled={busy} className="btn btn-primary">
+              {creds?.hasClientSecret ? 'Atualizar' : 'Salvar Credenciais'}
+            </button>
+          </div>
+        </section>
+      )}
 
       {tab === 'config' && (
         <section className="card p-6 space-y-4">

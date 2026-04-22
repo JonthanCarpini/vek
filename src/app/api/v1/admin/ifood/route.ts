@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
         ifoodStoreStatus: unit.ifoodStoreStatus || 'unknown',
         ifoodLastPollAt: unit.ifoodLastPollAt || null,
       },
-      credentialsConfigured: isIfoodConfigured(),
+      credentialsConfigured: await isIfoodConfigured(),
       counters: { received, preparing, ready, delivered },
     });
   } catch (e) {

@@ -23,9 +23,9 @@ export function isPollingRunning(): boolean {
 /**
  * Inicia o loop de polling. Chamar uma única vez no bootstrap do servidor.
  */
-export function startIfoodPolling() {
+export async function startIfoodPolling() {
   if (!stopped) return; // já está rodando
-  if (!isIfoodConfigured()) {
+  if (!(await isIfoodConfigured())) {
     console.log('[iFood] Credenciais não configuradas. Polling desativado.');
     return;
   }

@@ -6,10 +6,37 @@ import { prisma } from '@/lib/prisma';
 import type { IfoodAuthResponse } from './types';
 
 const IFOOD_API_URL = process.env.IFOOD_API_URL || 'https://merchant-api.ifood.com.br';
-const CLIENT_ID = process.env.IFOOD_CLIENT_ID || '';
-const CLIENT_SECRET = process.env.IFOOD_CLIENT_SECRET || '';
+const ENV_CLIENT_ID = process.env.IFOOD_CLIENT_ID || '';
+const ENV_CLIENT_SECRET = process.env.IFOOD_CLIENT_SECRET || '';
 
 const TOKEN_PATH = '/authentication/v1.0/oauth/token';
+
+/**
+ * Busca credenciais iFood. Prioriza banco (Tenant); cai para variáveis de ambiente.
+ */
+async function loadCredentials(): Promise<{ clientId: string; clientSecret: string } | null> {
+  // 1. Tenta pegar do banco (primeiro tenant com credenciais preenchidas)
+  try {
+    const tenant = await (prisma as any).tenant.findFirst({
+      where: {
+        ifoodClientId: { not: null },
+        ifoodClientSecret: { not: null },
+      },
+      select: { ifoodClientId: true, ifoodClientSecret: true },
+    });
+    if (tenant?.ifoodClientId && tenant?.ifoodClientSecret) {
+      return { clientId: tenant.ifoodClientId, clientSecret: tenant.ifoodClientSecret };
+    }
+  } catch {
+    // banco indisponível ou migração pendente, ignora
+  }
+
+  // 2. Fallback para .env
+  if (ENV_CLIENT_ID && ENV_CLIENT_SECRET) {
+    return { clientId: ENV_CLIENT_ID, clientSecret: ENV_CLIENT_SECRET };
+  }
+  return null;
+}
 
 export class IfoodConfigError extends Error {
   constructor(msg: string) {
@@ -30,10 +57,18 @@ export class IfoodApiError extends Error {
 }
 
 /**
- * Verifica se as credenciais globais estão configuradas.
+ * Verifica (assíncrono) se credenciais estão configuradas em DB ou env.
  */
-export function isIfoodConfigured(): boolean {
-  return !!(CLIENT_ID && CLIENT_SECRET);
+export async function isIfoodConfigured(): Promise<boolean> {
+  const creds = await loadCredentials();
+  return !!creds;
+}
+
+/**
+ * Verificação rápida síncrona (olha apenas env). Use isIfoodConfigured() para checagem completa.
+ */
+export function hasEnvCredentials(): boolean {
+  return !!(ENV_CLIENT_ID && ENV_CLIENT_SECRET);
 }
 
 /**
@@ -41,9 +76,10 @@ export function isIfoodConfigured(): boolean {
  * Tokens são compartilhados globalmente (unitId=null) pois as credenciais são globais.
  */
 export async function getAccessToken(forceRefresh = false): Promise<string> {
-  if (!isIfoodConfigured()) {
+  const creds = await loadCredentials();
+  if (!creds) {
     throw new IfoodConfigError(
-      'Credenciais iFood não configuradas. Defina IFOOD_CLIENT_ID e IFOOD_CLIENT_SECRET.'
+      'Credenciais iFood não configuradas. Configure no painel /admin/ifood ou defina IFOOD_CLIENT_ID/IFOOD_CLIENT_SECRET.'
     );
   }
 
@@ -56,14 +92,14 @@ export async function getAccessToken(forceRefresh = false): Promise<string> {
     }
   }
 
-  return refreshAccessToken();
+  return refreshAccessToken(creds);
 }
 
-async function refreshAccessToken(): Promise<string> {
+async function refreshAccessToken(creds: { clientId: string; clientSecret: string }): Promise<string> {
   const body = new URLSearchParams({
     grantType: 'client_credentials',
-    clientId: CLIENT_ID,
-    clientSecret: CLIENT_SECRET,
+    clientId: creds.clientId,
+    clientSecret: creds.clientSecret,
   });
 
   const res = await fetch(`${IFOOD_API_URL}${TOKEN_PATH}`, {
@@ -151,4 +187,5 @@ async function safeJson(res: Response): Promise<unknown> {
 export const ifoodConfig = {
   apiUrl: IFOOD_API_URL,
   hasCredentials: isIfoodConfigured,
+  hasEnvCredentials,
 };

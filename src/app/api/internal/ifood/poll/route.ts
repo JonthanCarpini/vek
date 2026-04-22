@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  if (!isIfoodConfigured()) {
+  if (!(await isIfoodConfigured())) {
     return NextResponse.json({ skipped: true, reason: 'credentials_missing' });
   }
 

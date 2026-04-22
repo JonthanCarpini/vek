@@ -66,12 +66,8 @@ app.prepare().then(() => {
 // Agendador simples para polling iFood via endpoint interno.
 // Usa fetch para http://localhost:<port>/api/internal/ifood/poll protegido pelo JWT_SECRET.
 function startIfoodPolling(port) {
-  const clientId = process.env.IFOOD_CLIENT_ID || '';
-  const clientSecret = process.env.IFOOD_CLIENT_SECRET || '';
-  if (!clientId || !clientSecret) {
-    console.log('[iFood] Polling desativado (credenciais ausentes).');
-    return;
-  }
+  // Credenciais podem estar no .env OU no banco (configuradas via /admin/ifood).
+  // Sempre agendamos; o endpoint interno verifica e retorna skipped se ausentes.
   const interval = parseInt(process.env.IFOOD_POLLING_INTERVAL_MS || '30000', 10);
   const secret = process.env.JWT_SECRET || '';
   const url = `http://127.0.0.1:${port}/api/internal/ifood/poll`;
