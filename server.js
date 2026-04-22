@@ -1,6 +1,5 @@
 // Servidor customizado Next.js + Socket.io
 // Usa um único processo para servir Next e WebSocket na mesma porta.
-console.log('[Server] Iniciando processo...');
 const { createServer } = require('http');
 const { parse } = require('url');
 const next = require('next');
@@ -8,13 +7,10 @@ const { Server } = require('socket.io');
 
 const dev = process.env.NODE_ENV !== 'production';
 const port = parseInt(process.env.PORT || '3000', 10);
-console.log(`[Server] Iniciando Next.js (dev=${dev})...`);
 const app = next({ dev });
 const handle = app.getRequestHandler();
 
-console.log('[Server] Preparando app...');
 app.prepare().then(() => {
-  console.log('[Server] App preparado. Criando servidor HTTP...');
   const httpServer = createServer((req, res) => {
     const parsedUrl = parse(req.url, true);
     handle(req, res, parsedUrl);
@@ -28,8 +24,8 @@ app.prepare().then(() => {
   // Expor globalmente para que route handlers possam emitir
   globalThis.__io = io;
 
-  console.log('[Server] Importando serviços de WhatsApp e Prisma...');
-  // Inicializar WhatsApp para unidades habilitadas
+  // Inicializar WhatsApp para unidades habilitadas (Desativado temporariamente para estabilidade)
+  /*
   const { whatsappService } = require('./src/lib/whatsapp');
   const { prisma } = require('./src/lib/prisma');
   
@@ -45,6 +41,7 @@ app.prepare().then(() => {
     }
   }
   initWhatsApp();
+  */
 
   io.on('connection', (socket) => {
     // O cliente diz em qual(is) room(s) quer entrar
