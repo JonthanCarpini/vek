@@ -351,7 +351,10 @@ function OrderCard({
   onCancel: (o: any) => void;
   onAssignDriver: (o: any, driverId: string | null) => void;
 }) {
-  const channel = (o.channel || 'dine-in') as Channel;
+  // Fallback defensivo: pedidos legados podem não ter `channel` ou vir com
+  // valor inesperado; sem isto o `meta.icon` quebra a render completa.
+  const rawChannel = (o.channel || 'dine-in') as string;
+  const channel = (CHANNEL_META[rawChannel as Channel] ? rawChannel : 'dine-in') as Channel;
   const meta = CHANNEL_META[channel];
   const ChannelIcon = meta.icon;
   const statusInfo = STATUS_LABELS[o.status] || { label: o.status, dot: 'bg-gray-500', chip: 'bg-gray-500/15 text-gray-300 border-gray-500/30' };
