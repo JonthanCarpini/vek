@@ -91,7 +91,7 @@ export default function Home() {
           </h1>
           <div className="flex flex-col items-center gap-2">
             <p className="text-gray-400 text-lg max-w-md mx-auto leading-relaxed">
-              {unit?.slug && (unit?.deliveryEnabled || unit?.takeoutEnabled) ? (
+              {(unit?.deliveryEnabled || unit?.takeoutEnabled) ? (
                 <>No restaurante? Escaneie a mesa. <br/>Em casa? Peça pelo delivery.</>
               ) : (
                 <>Bem-vindo à nossa mesa digital. <br/>Escaneie o código da sua mesa para começar.</>
@@ -153,9 +153,9 @@ export default function Home() {
               </div>
             </button>
 
-            {unit?.slug && (unit?.deliveryEnabled || unit?.takeoutEnabled) && (
+            {(unit?.deliveryEnabled || unit?.takeoutEnabled) && (
               <Link
-                href={`/delivery/${unit.slug}`}
+                href="/delivery"
                 className="w-full bg-[#1f1f2b]/95 backdrop-blur-xl p-6 rounded-[2.5rem] border border-orange-500/30 shadow-2xl flex items-center justify-between active:scale-95 transition-all duration-300 group"
               >
                 <div className="text-left flex items-start gap-3">

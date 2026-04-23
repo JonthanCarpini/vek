@@ -1,17 +1,15 @@
 import { NextRequest } from 'next/server';
 import { ok, serverError, fail, parseBody } from '@/lib/api';
 import { prisma } from '@/lib/prisma';
-import { geocodeAddress, GeocodeError, lookupZipCode } from '@/lib/delivery/geocoding';
+import { geocodeAddress, GeocodeError } from '@/lib/delivery/geocoding';
 import { calculateDeliveryFee } from '@/lib/delivery/pricing';
 import { z } from 'zod';
 
 /**
  * POST /api/v1/delivery/quote
- * Body: { slug, address | lat+lng, orderSubtotal? }
- * Retorna: { distanceKm, fee, isFree, estimatedMinutes, outOfRange, lat, lng, formatted }
+ * Body: { address | lat+lng, orderSubtotal? }
  */
 const schema = z.object({
-  slug: z.string().trim().min(1),
   address: z.string().trim().min(5).max(300).optional(),
   lat: z.number().optional(),
   lng: z.number().optional(),
@@ -26,8 +24,8 @@ export async function POST(req: NextRequest) {
     const p = await parseBody(req, schema);
     if (!p.ok) return p.res;
 
-    const unit = await prisma.unit.findUnique({
-      where: { slug: p.data.slug } as any,
+    const unit = await prisma.unit.findFirst({
+      where: { active: true },
       select: {
         id: true, deliveryEnabled: true, deliveryMinOrder: true,
         addressLat: true, addressLng: true,
@@ -39,7 +37,6 @@ export async function POST(req: NextRequest) {
       return fail('Loja sem endereço configurado', 503);
     }
 
-    // Resolve lat/lng (geocode se só tiver address)
     let lat = p.data.lat;
     let lng = p.data.lng;
     let formatted: string | undefined;

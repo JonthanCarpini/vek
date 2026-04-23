@@ -29,7 +29,6 @@ export default function ConfigTab() {
     setSaving(true);
     try {
       const payload: any = {
-        slug: config.slug || undefined,
         deliveryEnabled: config.deliveryEnabled,
         takeoutEnabled: config.takeoutEnabled,
         deliveryMinOrder: Number(config.deliveryMinOrder),
@@ -62,9 +61,7 @@ export default function ConfigTab() {
   if (loading) return <div className="text-center text-gray-400 py-10">Carregando...</div>;
   if (!config) return <div className="text-red-400">Erro ao carregar</div>;
 
-  const publicUrl = config.slug
-    ? `${typeof window !== 'undefined' ? window.location.origin : ''}/delivery/${config.slug}`
-    : null;
+  const publicUrl = typeof window !== 'undefined' ? `${window.location.origin}/delivery` : '/delivery';
 
   return (
     <div className="space-y-6">
@@ -102,36 +99,21 @@ export default function ConfigTab() {
       {/* URL pública */}
       <section className="card p-5">
         <h2 className="font-bold text-lg mb-4">URL Pública</h2>
-        <div>
-          <label className="label">Slug (URL amigável)</label>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-400 whitespace-nowrap">/delivery/</span>
-            <input
-              type="text"
-              value={config.slug || ''}
-              onChange={(e) => update({ slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })}
-              placeholder="minha-loja"
-              className="flex-1 input"
-            />
-          </div>
-          {publicUrl && (
-            <div className="mt-2 flex items-center gap-2">
-              <a
-                href={publicUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm text-orange-400 hover:underline break-all"
-              >
-                {publicUrl}
-              </a>
-              <button
-                onClick={() => { navigator.clipboard.writeText(publicUrl); setToast('📋 URL copiada'); setTimeout(() => setToast(null), 2000); }}
-                className="text-xs px-2 py-1 bg-gray-800 text-gray-200 rounded hover:bg-gray-700"
-              >
-                Copiar
-              </button>
-            </div>
-          )}
+        <div className="flex items-center gap-2">
+          <a
+            href={publicUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-orange-400 hover:underline break-all"
+          >
+            {publicUrl}
+          </a>
+          <button
+            onClick={() => { navigator.clipboard.writeText(publicUrl); setToast('📋 URL copiada'); setTimeout(() => setToast(null), 2000); }}
+            className="text-xs px-2 py-1 bg-gray-800 text-gray-200 rounded hover:bg-gray-700"
+          >
+            Copiar
+          </button>
         </div>
       </section>
 

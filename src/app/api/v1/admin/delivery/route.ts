@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     const unit = await prisma.unit.findUnique({
       where: { id: g.staff.unitId },
       select: {
-        id: true, name: true, slug: true,
+        id: true, name: true,
         deliveryEnabled: true, takeoutEnabled: true,
         deliveryMinOrder: true, deliveryMaxRadiusKm: true,
         deliveryBaseFee: true, deliveryFeePerKm: true, deliveryFreeOver: true,
@@ -32,7 +32,6 @@ export async function GET(req: NextRequest) {
     return ok({
       id: unit.id,
       name: unit.name,
-      slug: unit.slug,
       deliveryEnabled: unit.deliveryEnabled,
       takeoutEnabled: unit.takeoutEnabled,
       deliveryMinOrder: Number(unit.deliveryMinOrder),
@@ -52,10 +51,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-const slugRegex = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
-
 const updateSchema = z.object({
-  slug: z.string().trim().toLowerCase().regex(slugRegex, 'Slug inválido (apenas a-z, 0-9, -)').min(2).max(80).optional(),
   deliveryEnabled: z.boolean().optional(),
   takeoutEnabled: z.boolean().optional(),
   deliveryMinOrder: z.number().min(0).optional(),
@@ -82,16 +78,6 @@ export async function PATCH(req: NextRequest) {
 
     const p = await parseBody(req, updateSchema);
     if (!p.ok) return p.res;
-
-    // Valida slug único
-    if (p.data.slug) {
-      const existing = await prisma.unit.findUnique({
-        where: { slug: p.data.slug } as any,
-      }) as any;
-      if (existing && existing.id !== g.staff.unitId) {
-        return fail('Slug já está em uso', 409);
-      }
-    }
 
     await prisma.unit.update({
       where: { id: g.staff.unitId },
