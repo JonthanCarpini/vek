@@ -6,6 +6,7 @@ import { requireStaff, ROLES } from '@/lib/guard';
 import { emitToKitchen, emitToSession, emitToDashboard, SocketEvents } from '@/lib/socket';
 import { sendOrderReadyWhatsApp } from '@/lib/orders';
 import { syncStatusToIfood } from '@/lib/ifood/actions';
+import { notifyDeliveryCustomer } from '@/lib/delivery/status';
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -43,9 +44,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         tableNumber: order.table?.number,
         readyAt: now,
       });
-      // Notifica o cliente via WhatsApp (async, sem bloquear a resposta)
-      sendOrderReadyWhatsApp(order.id).catch(err =>
-        console.error('[WhatsApp] Falha ao notificar pedido pronto:', err)
+    }
+
+    // Notificações dependem do canal
+    if (existing.channel === 'delivery') {
+      // Delivery: WhatsApp com template de delivery + push nativo (Web Push + FCM)
+      notifyDeliveryCustomer(order.id, status).catch((err) =>
+        console.error('[Delivery] Notify from kitchen:', err),
+      );
+    } else if (status === 'ready') {
+      // Dine-in/iFood: apenas notificação "pedido pronto" via WhatsApp
+      sendOrderReadyWhatsApp(order.id).catch((err) =>
+        console.error('[WhatsApp] Falha ao notificar pedido pronto:', err),
       );
     }
 

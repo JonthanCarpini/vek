@@ -62,23 +62,6 @@ export function MenuTab({ categories, onSelectProduct, primaryColor }: Props) {
     }
   };
 
-  // Filtro global (se tiver query, ignora categoria)
-  const filteredProducts = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (q) {
-      const all: Product[] = [];
-      for (const c of categories) {
-        for (const p of c.products) {
-          const hit = p.name.toLowerCase().includes(q) || (p.description || '').toLowerCase().includes(q);
-          if (hit) all.push(p);
-        }
-      }
-      return all;
-    }
-    const cat = categories.find((c) => c.id === activeCat) || categories[0];
-    return cat?.products || [];
-  }, [query, activeCat, categories]);
-
   if (categories.length === 0) {
     return (
       <div className="p-8 text-center text-gray-400">

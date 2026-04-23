@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { emitToKitchen, emitToDashboard, emitToWaiters, SocketEvents } from '@/lib/socket';
 import { whatsappService } from '@/lib/whatsapp';
 import { sendPushToCustomer, statusPushTemplates } from './push';
+import { sendFcmToCustomer, statusFcmTemplates } from './fcm';
 
 export type DeliveryStatus = 'accepted' | 'preparing' | 'ready' | 'dispatched' | 'delivered' | 'cancelled';
 
@@ -76,18 +77,46 @@ export async function updateDeliveryOrderStatus(input: StatusChangeInput): Promi
   return { ok: true, order: updated };
 }
 
+/**
+ * Notifica o cliente (WhatsApp + Web Push + FCM) para um pedido já atualizado.
+ * Exportado para uso no kitchen endpoint quando o pedido é delivery.
+ */
+export async function notifyDeliveryCustomer(orderId: string, status: string): Promise<void> {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { driver: true } as any,
+  }) as any;
+  if (!order) return;
+  await Promise.all([
+    notifyCustomerStatus(order).catch(() => {}),
+    notifyCustomerPush(order).catch(() => {}),
+  ]);
+}
+
 async function notifyCustomerPush(order: any) {
   if (!order.customerId) return;
-  const template = statusPushTemplates[order.status];
-  if (!template) return;
-  const payload = template(order.sequenceNumber);
-  payload.url = `/delivery/pedidos/${order.id}`;
-  payload.data = { orderId: order.id, status: order.status };
-  await sendPushToCustomer({
-    unitId: order.unitId,
-    customerId: order.customerId,
-    payload,
-  });
+
+  // Web Push (browser)
+  const webTemplate = statusPushTemplates[order.status];
+  if (webTemplate) {
+    const payload = webTemplate(order.sequenceNumber);
+    payload.url = `/delivery/pedidos/${order.id}`;
+    payload.data = { orderId: order.id, status: order.status };
+    await sendPushToCustomer({ unitId: order.unitId, customerId: order.customerId, payload });
+  }
+
+  // FCM (Capacitor APK)
+  const fcmTemplate = statusFcmTemplates[order.status];
+  if (fcmTemplate) {
+    const { title, body } = fcmTemplate(order.sequenceNumber);
+    await sendFcmToCustomer({
+      unitId: order.unitId,
+      customerId: order.customerId,
+      title,
+      body,
+      data: { orderId: order.id, status: order.status, url: `/delivery/pedidos/${order.id}` },
+    });
+  }
 }
 
 async function notifyCustomerStatus(order: any) {

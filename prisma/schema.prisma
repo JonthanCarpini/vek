@@ -94,6 +94,7 @@ model Unit {
   otpCodes          OtpCode[]
   geocodeCache      GeocodeCache[]
   pushSubscriptions PushSubscription[]
+  fcmTokens         FcmToken[]
 
   @@index([tenantId])
 }
@@ -435,6 +436,7 @@ model Customer {
   orders            Order[]
   addresses         DeliveryAddress[]
   pushSubscriptions PushSubscription[]
+  fcmTokens         FcmToken[]
 
   @@unique([unitId, phone])
   @@index([unitId, name])
@@ -545,6 +547,23 @@ model PushSubscription {
   userAgent  String?  @db.VarChar(500)
   lastSeenAt DateTime @default(now())
   createdAt  DateTime @default(now())
+
+  unit     Unit      @relation(fields: [unitId], references: [id])
+  customer Customer? @relation(fields: [customerId], references: [id])
+
+  @@index([unitId])
+  @@index([customerId])
+}
+
+/// FCM tokens para push nativo no Capacitor (Android/iOS).
+/// Um customer pode ter vários devices; tokens inválidos são removidos automaticamente.
+model FcmToken {
+  id         String   @id @default(cuid())
+  token      String   @unique @db.VarChar(255)
+  customerId String?
+  unitId     String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   unit     Unit      @relation(fields: [unitId], references: [id])
   customer Customer? @relation(fields: [customerId], references: [id])

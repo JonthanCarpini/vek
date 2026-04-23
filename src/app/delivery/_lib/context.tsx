@@ -167,11 +167,15 @@ export function DeliveryProvider({ children }: { children: React.ReactNode }) {
     if (res.ok) setAddresses(res.data.addresses);
   }, [customer]);
 
-  // Auto-load orders/addresses once customer is known
+  // Auto-load orders/addresses + register FCM once customer is known
   useEffect(() => {
     if (!customer) return;
     reloadOrders();
     reloadAddresses();
+    // Renova o token FCM no Capacitor APK (no-op em browser)
+    import('./capacitor-push').then(({ registerCapacitorPush }) => {
+      registerCapacitorPush(customer.id).catch(() => {});
+    });
   }, [customer, reloadOrders, reloadAddresses]);
 
   // Poll active orders every 30s to keep the Pedidos badge fresh
@@ -220,6 +224,10 @@ export function DeliveryProvider({ children }: { children: React.ReactNode }) {
   const loginSuccess = (c: any) => {
     setCustomer(c);
     setStep(orderType === 'delivery' ? 'address' : 'checkout');
+    // Registra FCM push nativo no Capacitor APK (no-op em browser regular)
+    import('./capacitor-push').then(({ registerCapacitorPush }) => {
+      registerCapacitorPush(c.id).catch(() => {});
+    });
   };
 
   const logout = async () => {
