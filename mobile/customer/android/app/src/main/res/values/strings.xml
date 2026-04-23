@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Espetinho do Chef</string>
+    <string name="title_activity_main">Espetinho do Chef</string>
+    <string name="package_name">site.espetinhodochef.customer</string>
+    <string name="custom_url_scheme">site.espetinhodochef.customer</string>
+</resources>
