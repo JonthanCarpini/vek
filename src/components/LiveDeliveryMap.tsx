@@ -77,7 +77,7 @@ export function LiveDeliveryMap({
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://tile.openstreetmap.org/{z}/{y}/{x}.png"
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <Marker position={[driverLat, driverLng]} icon={driverIcon}>
           <Popup>Seu entregador</Popup>

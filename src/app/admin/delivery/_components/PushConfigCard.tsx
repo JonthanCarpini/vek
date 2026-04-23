@@ -35,7 +35,7 @@ export default function PushConfigCard() {
     try {
       const body = await apiFetch('/api/v1/admin/delivery/push-config');
       setData(body);
-      setGenSubject((prev) => prev || body.subject || 'mailto:');
+      setGenSubject((prev) => prev || body.subject || '');
     } catch (e: any) {
       setToast(e.message || 'Erro ao carregar');
     } finally { setLoading(false); }
@@ -43,9 +43,9 @@ export default function PushConfigCard() {
   useEffect(() => { load(); }, []);
 
   const handleGenerate = async () => {
-    if (!/^(mailto:|https:\/\/)/.test(genSubject)) {
-      setToast('Subject precisa começar com mailto: ou https://');
-      setTimeout(() => setToast(null), 3000);
+    if (!/^mailto:[^\s@]+@[^\s@]+\.[^\s@]+$/.test(genSubject) && !/^https:\/\/\S+$/.test(genSubject)) {
+      setToast('Subject inválido: use mailto:email@dominio.com ou https://seusite.com');
+      setTimeout(() => setToast(null), 4000);
       return;
     }
     if (data?.configured && !confirm(
@@ -132,6 +132,11 @@ export default function PushConfigCard() {
               {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
             </button>
           </div>
+              {data.subject && !/^mailto:[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.subject) && !/^https:\/\/\S+$/.test(data.subject) && (
+            <div className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded px-2 py-1">
+              ⚠️ Subject inválido — as notificações não serão enviadas. Gere novas chaves com um e-mail válido abaixo.
+            </div>
+          )}
           <div className="flex items-center justify-between text-xs text-gray-400 pt-2 border-t border-[var(--border)]">
             <span>Devices inscritos:</span>
             <span className="font-semibold text-gray-200">{data.subscriptions}</span>

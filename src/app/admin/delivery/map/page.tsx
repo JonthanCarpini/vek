@@ -28,14 +28,17 @@ interface FleetResponse {
 export default function AdminDeliveryMapPage() {
   const [data, setData] = useState<FleetResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const load = async () => {
+    setError(null);
     try {
       const res: FleetResponse = await apiFetch('/api/v1/admin/delivery/fleet');
       setData(res);
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      setError(e?.message || 'Erro ao carregar dados da frota');
     } finally {
       setLoading(false);
     }
@@ -122,6 +125,19 @@ export default function AdminDeliveryMapPage() {
 
       {loading && !data ? (
         <div className="h-[60vh] rounded-xl bg-black/20 animate-pulse" />
+      ) : error ? (
+        <div className="card p-6 border border-red-500/30 bg-red-500/5 text-red-200">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold">Erro ao carregar mapa</p>
+              <p className="text-sm text-red-300/80 mt-1">{error}</p>
+              <button onClick={load} className="mt-2 text-sm underline text-red-200">
+                Tentar novamente
+              </button>
+            </div>
+          </div>
+        </div>
       ) : !data?.origin ? (
         <div className="card p-6 border border-amber-500/30 bg-amber-500/5 text-amber-200">
           <div className="flex items-start gap-3">

@@ -56,7 +56,10 @@ export async function GET(req: NextRequest) {
 const patchSchema = z.object({
   publicKey: z.string().min(20).max(500),
   privateKey: z.string().min(20).max(500),
-  subject: z.string().regex(/^(mailto:|https:\/\/)/, 'Subject deve começar com mailto: ou https://'),
+  subject: z.string().regex(
+    /^mailto:[^\s@]+@[^\s@]+\.[^\s@]+$|^https:\/\/\S+$/,
+    'Subject inválido: use mailto:email@dominio.com ou https://seusite.com',
+  ),
 });
 
 export async function PATCH(req: NextRequest) {
@@ -85,7 +88,10 @@ export async function PATCH(req: NextRequest) {
 }
 
 const generateSchema = z.object({
-  subject: z.string().regex(/^(mailto:|https:\/\/)/),
+  subject: z.string().regex(
+    /^mailto:[^\s@]+@[^\s@]+\.[^\s@]+$|^https:\/\/\S+$/,
+    'Subject inválido: use mailto:email@dominio.com ou https://seusite.com',
+  ),
 });
 
 export async function POST(req: NextRequest) {

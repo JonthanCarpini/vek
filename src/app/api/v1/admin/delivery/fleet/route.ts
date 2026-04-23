@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
       },
       select: {
         id: true, sequenceNumber: true, customerName: true, customerPhone: true,
-        deliveryAddress: true, deliveryLat: true, deliveryLng: true,
+        deliveryAddress: true, customerLat: true, customerLng: true,
         dispatchedAt: true, estimatedDeliveryAt: true,
         driver: {
           select: {
@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
       .filter((o) =>
         o.driver &&
         o.driver.currentLat != null && o.driver.currentLng != null &&
-        o.deliveryLat != null && o.deliveryLng != null,
+        o.customerLat != null && o.customerLng != null,
       )
       .map((o) => ({
         id: o.id,
@@ -52,8 +52,8 @@ export async function GET(req: NextRequest) {
         customerName: o.customerName,
         customerPhone: o.customerPhone,
         deliveryAddress: o.deliveryAddress,
-        deliveryLat: Number(o.deliveryLat),
-        deliveryLng: Number(o.deliveryLng),
+        deliveryLat: Number(o.customerLat),
+        deliveryLng: Number(o.customerLng),
         dispatchedAt: o.dispatchedAt,
         estimatedDeliveryAt: o.estimatedDeliveryAt,
         driver: {
