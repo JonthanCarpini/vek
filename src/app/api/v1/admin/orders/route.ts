@@ -32,7 +32,10 @@ export async function GET(req: NextRequest) {
         items: true,
         table: { select: { number: true, label: true, virtual: true } },
         session: { select: { customerName: true } },
-        driver: { select: { id: true, name: true, phone: true } },
+        driver: { select: {
+          id: true, name: true, phone: true,
+          currentLat: true, currentLng: true, lastLocationAt: true,
+        } },
       } as any,
     }) as any[];
 
@@ -62,7 +65,14 @@ export async function GET(req: NextRequest) {
       createdAt: o.createdAt,
       table: o.table,
       session: o.session,
-      driver: o.driver,
+      driver: o.driver ? {
+        id: o.driver.id,
+        name: o.driver.name,
+        phone: o.driver.phone,
+        currentLat: o.driver.currentLat != null ? Number(o.driver.currentLat) : null,
+        currentLng: o.driver.currentLng != null ? Number(o.driver.currentLng) : null,
+        lastLocationAt: o.driver.lastLocationAt,
+      } : null,
       items: o.items.map((i: any) => ({
         id: i.id,
         name: i.name,

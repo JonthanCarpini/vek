@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { Map as MapIcon } from 'lucide-react';
 import { apiFetch } from '@/lib/staff-client';
 import ConfigTab from './_components/ConfigTab';
 import OrdersTab from './_components/OrdersTab';
@@ -33,11 +35,24 @@ export default function AdminDeliveryPage() {
 
   return (
     <div className="p-4 md:p-6 max-w-6xl mx-auto">
-      <header className="mb-6">
-        <h1 className="text-2xl font-bold">🚴 Delivery</h1>
-        <p className="text-sm text-gray-400 mt-1">
-          Gerencie pedidos, configurações e taxa de entrega
-        </p>
+      <header className="mb-6 flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold">🚴 Delivery</h1>
+          <p className="text-sm text-gray-400 mt-1">
+            Gerencie pedidos, configurações e taxa de entrega
+          </p>
+        </div>
+        <Link
+          href="/admin/delivery/map"
+          className="btn btn-secondary text-sm flex items-center gap-2"
+        >
+          <MapIcon className="w-4 h-4" /> Mapa ao vivo
+          {(counts.dispatched || 0) > 0 && (
+            <span className="bg-emerald-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+              {counts.dispatched}
+            </span>
+          )}
+        </Link>
       </header>
 
       <div className="flex gap-1 border-b border-gray-800 mb-6">

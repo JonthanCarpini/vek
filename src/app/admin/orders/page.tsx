@@ -1,12 +1,20 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import dynamic from 'next/dynamic';
+import Link from 'next/link';
 import { apiFetch } from '@/lib/staff-client';
 import { getSocket } from '@/lib/socket-client';
 import {
   RefreshCw, Search, ChevronDown, ChevronUp, MapPin, User, Phone,
-  Bike, ShoppingBag, UtensilsCrossed, ExternalLink, Truck,
+  Bike, ShoppingBag, UtensilsCrossed, ExternalLink, Truck, Map as MapIcon,
 } from 'lucide-react';
+
+// Leaflet só no cliente — evita `window is not defined` no SSR
+const LiveDeliveryMap = dynamic(
+  () => import('@/components/LiveDeliveryMap').then((m) => m.LiveDeliveryMap),
+  { ssr: false, loading: () => <div className="h-[240px] rounded-xl bg-black/20 animate-pulse" /> },
+);
 
 // Dicionário de status — inclui transições de delivery (dispatched).
 const STATUS_LABELS: Record<string, { label: string; dot: string; chip: string }> = {
@@ -115,14 +123,27 @@ export default function AdminOrdersPage() {
     // Socket — reage a novos pedidos e mudanças de status
     const socket = getSocket();
     const refresh = () => load();
+    // Atualização patch do lat/lng do motoboy sem full reload (vem em order:{id} E dashboard)
+    const onDriverLocation = (p: any) => {
+      if (!p?.driverId) return;
+      setOrders((prev) => prev.map((o) => {
+        if (o.driver?.id !== p.driverId) return o;
+        return {
+          ...o,
+          driver: { ...o.driver, currentLat: p.lat, currentLng: p.lng, lastLocationAt: p.at },
+        };
+      }));
+    };
     socket.on('order.created', refresh);
     socket.on('order.updated', refresh);
     socket.on('order.status_changed', refresh);
+    socket.on('driver.location', onDriverLocation);
     const timer = setInterval(load, 20_000);
     return () => {
       socket.off('order.created', refresh);
       socket.off('order.updated', refresh);
       socket.off('order.status_changed', refresh);
+      socket.off('driver.location', onDriverLocation);
       clearInterval(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -218,12 +239,20 @@ export default function AdminOrdersPage() {
             Acompanhe e gerencie todos os pedidos (mesa, delivery, iFood)
           </p>
         </div>
-        <button
-          onClick={load}
-          className="btn btn-secondary text-sm flex items-center gap-2"
-        >
-          <RefreshCw className="w-4 h-4" /> Atualizar
-        </button>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/admin/delivery/map"
+            className="btn btn-secondary text-sm flex items-center gap-2"
+          >
+            <MapIcon className="w-4 h-4" /> Mapa ao vivo
+          </Link>
+          <button
+            onClick={load}
+            className="btn btn-secondary text-sm flex items-center gap-2"
+          >
+            <RefreshCw className="w-4 h-4" /> Atualizar
+          </button>
+        </div>
       </header>
 
       {/* Chips de canal + busca */}
@@ -531,6 +560,28 @@ function OrderCard({
             )}
           </div>
 
+          {/* Mapa ao vivo — motoboy a caminho */}
+          {isDelivery && o.status === 'dispatched' && o.driver?.currentLat != null && o.driver?.currentLng != null
+            && o.deliveryLat != null && o.deliveryLng != null && (
+            <div>
+              <h4 className="text-xs font-semibold text-gray-400 uppercase mb-1.5 flex items-center gap-1.5">
+                <MapIcon className="w-3.5 h-3.5" /> Trajeto ao vivo
+                <span className="flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.5 rounded-full ml-1">
+                  <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
+                  AO VIVO
+                </span>
+              </h4>
+              <LiveDeliveryMap
+                driverLat={o.driver.currentLat}
+                driverLng={o.driver.currentLng}
+                destLat={o.deliveryLat}
+                destLng={o.deliveryLng}
+                height={260}
+              />
+              <DriverLocationStatus lastLocationAt={o.driver.lastLocationAt} />
+            </div>
+          )}
+
           {/* Atribuição de motoboy (somente pedidos de entrega) */}
           {isDelivery && ['accepted', 'preparing', 'ready', 'dispatched'].includes(o.status) && (
             <div>
@@ -606,6 +657,24 @@ function InfoBlock({ label, children }: { label: string; children: React.ReactNo
     <div>
       <h4 className="text-xs font-semibold text-gray-400 uppercase mb-0.5">{label}</h4>
       <div className="text-gray-200 text-sm">{children}</div>
+    </div>
+  );
+}
+
+function DriverLocationStatus({ lastLocationAt }: { lastLocationAt: string | Date | null }) {
+  const [, force] = useState(0);
+  useEffect(() => {
+    const i = setInterval(() => force((n) => n + 1), 15_000);
+    return () => clearInterval(i);
+  }, []);
+  if (!lastLocationAt) return null;
+  const secondsAgo = Math.round((Date.now() - new Date(lastLocationAt).getTime()) / 1000);
+  const stale = secondsAgo > 120;
+  return (
+    <div className={`text-[11px] mt-2 ${stale ? 'text-gray-500' : 'text-emerald-400'}`}>
+      {stale
+        ? '⚠️ Localização antiga — pode ser que o motoboy perdeu conexão'
+        : `Atualizado há ${secondsAgo < 60 ? `${secondsAgo}s` : `${Math.round(secondsAgo / 60)}min`}`}
     </div>
   );
 }
