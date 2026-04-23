@@ -203,7 +203,7 @@ export default function MenuStep({ onOpenCart }: { onOpenCart: () => void }) {
       {cartCount > 0 && (
         <button
           onClick={onOpenCart}
-          className="fixed bottom-4 left-4 right-4 max-w-md mx-auto z-20 bg-orange-500 hover:bg-orange-600 text-white rounded-xl shadow-lg py-3 px-4 flex items-center justify-between font-semibold transition"
+          className="fixed bottom-20 left-4 right-4 max-w-md mx-auto z-20 bg-orange-500 hover:bg-orange-600 text-white rounded-xl shadow-lg py-3 px-4 flex items-center justify-between font-semibold transition"
         >
           <div className="flex items-center gap-2">
             <ShoppingCart className="w-5 h-5" />
