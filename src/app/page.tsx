@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { QRScanner } from '@/components/QRScanner';
-import { MapPin, Phone, Clock, QrCode, Download, ArrowRight, Instagram, Globe } from 'lucide-react';
+import { MapPin, Phone, Clock, QrCode, Download, ArrowRight, Instagram, Globe, Bike, Home as HomeIcon } from 'lucide-react';
 
 export default function Home() {
   const router = useRouter();
@@ -91,8 +91,11 @@ export default function Home() {
           </h1>
           <div className="flex flex-col items-center gap-2">
             <p className="text-gray-400 text-lg max-w-md mx-auto leading-relaxed">
-              Bem-vindo à nossa mesa digital. <br/>
-              Escaneie o código da sua mesa para começar.
+              {unit?.slug && (unit?.deliveryEnabled || unit?.takeoutEnabled) ? (
+                <>No restaurante? Escaneie a mesa. <br/>Em casa? Peça pelo delivery.</>
+              ) : (
+                <>Bem-vindo à nossa mesa digital. <br/>Escaneie o código da sua mesa para começar.</>
+              )}
             </p>
             {unit && (
               <div className={`px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${unit.isOpen ? 'bg-green-500/20 text-green-500 border border-green-500/30' : 'bg-red-500/20 text-red-500 border border-red-500/30'}`}>
@@ -127,20 +130,60 @@ export default function Home() {
             </div>
           </Link>
         ) : (
-          <button 
-            onClick={() => setShowScanner(true)}
-            className="w-full bg-orange-600 p-6 rounded-[2.5rem] flex items-center justify-between active:scale-95 transition-all duration-300 shadow-2xl shadow-orange-900/40 group overflow-hidden relative"
-          >
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
-            <div className="text-left relative z-10">
-              <div className="text-2xl font-black">Escanear Mesa</div>
-              <div className="text-orange-100 text-sm opacity-80 font-medium">Abra sua conta e peça agora</div>
-            </div>
-            <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center relative z-10">
-              {/* @ts-ignore */}
-              <QrCode size={32} color="white" />
-            </div>
-          </button>
+          <>
+            <button
+              onClick={() => setShowScanner(true)}
+              className="w-full bg-orange-600 p-6 rounded-[2.5rem] flex items-center justify-between active:scale-95 transition-all duration-300 shadow-2xl shadow-orange-900/40 group overflow-hidden relative"
+            >
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
+              <div className="text-left relative z-10 flex items-start gap-3">
+                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center shrink-0 mt-0.5">
+                  {/* @ts-ignore */}
+                  <HomeIcon size={20} color="white" />
+                </div>
+                <div>
+                  <div className="text-[10px] font-black uppercase tracking-widest text-orange-100 opacity-80">Estou no restaurante</div>
+                  <div className="text-2xl font-black leading-tight">Escanear Mesa</div>
+                  <div className="text-orange-100 text-xs opacity-80 font-medium">Abra sua conta e peça agora</div>
+                </div>
+              </div>
+              <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center relative z-10 shrink-0">
+                {/* @ts-ignore */}
+                <QrCode size={32} color="white" />
+              </div>
+            </button>
+
+            {unit?.slug && (unit?.deliveryEnabled || unit?.takeoutEnabled) && (
+              <Link
+                href={`/delivery/${unit.slug}`}
+                className="w-full bg-[#1f1f2b]/95 backdrop-blur-xl p-6 rounded-[2.5rem] border border-orange-500/30 shadow-2xl flex items-center justify-between active:scale-95 transition-all duration-300 group"
+              >
+                <div className="text-left flex items-start gap-3">
+                  <div className="w-10 h-10 bg-orange-500/15 rounded-xl flex items-center justify-center shrink-0 mt-0.5">
+                    {/* @ts-ignore */}
+                    <Bike size={20} color={primaryColor} />
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-black uppercase tracking-widest text-orange-500">Estou em casa</div>
+                    <div className="text-2xl font-black leading-tight">
+                      {unit.deliveryEnabled && unit.takeoutEnabled
+                        ? 'Delivery ou Retirada'
+                        : unit.deliveryEnabled
+                          ? 'Pedir Delivery'
+                          : 'Retirar no Balcão'}
+                    </div>
+                    <div className="text-gray-400 text-xs font-medium">
+                      {unit.deliveryEnabled ? 'Receba na sua porta' : 'Pegue no balcão quando estiver pronto'}
+                    </div>
+                  </div>
+                </div>
+                <div className="w-12 h-12 bg-orange-500/10 rounded-2xl flex items-center justify-center shrink-0 group-hover:bg-orange-500/20 transition-colors">
+                  {/* @ts-ignore */}
+                  <ArrowRight color={primaryColor} size={22} className="group-hover:translate-x-1 transition-transform" />
+                </div>
+              </Link>
+            )}
+          </>
         )}
 
         {installPrompt && (

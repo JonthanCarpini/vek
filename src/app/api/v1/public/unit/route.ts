@@ -11,6 +11,7 @@ export async function GET(_req: NextRequest) {
         id: true, name: true, address: true, phone: true,
         whatsapp: true, instagram: true, logoUrl: true, primaryColor: true,
         serviceFee: true, paymentMethods: true, onlinePaymentEnabled: true,
+        slug: true, deliveryEnabled: true, takeoutEnabled: true,
         businessHours: {
           where: { active: true },
           select: { weekday: true, openTime: true, closeTime: true }
