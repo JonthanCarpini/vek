@@ -3,6 +3,16 @@
 
 export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: string; status: number };
 
+function extractError(body: any): string {
+  if (!body) return 'Erro na requisição';
+  // Server wrapper retorna { error: { message, details } } ou { error: 'string' } ou { message: 'string' }
+  const raw = body.error ?? body.message;
+  if (!raw) return 'Erro na requisição';
+  if (typeof raw === 'string') return raw;
+  if (typeof raw === 'object' && typeof raw.message === 'string') return raw.message;
+  return 'Erro na requisição';
+}
+
 async function call<T>(url: string, init?: RequestInit): Promise<ApiResult<T>> {
   try {
     const res = await fetch(url, {
@@ -12,7 +22,7 @@ async function call<T>(url: string, init?: RequestInit): Promise<ApiResult<T>> {
     });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
-      return { ok: false, error: body.error || body.message || 'Erro na requisição', status: res.status };
+      return { ok: false, error: extractError(body), status: res.status };
     }
     return { ok: true, data: body.data };
   } catch (e: any) {

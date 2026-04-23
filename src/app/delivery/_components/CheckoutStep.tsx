@@ -85,7 +85,7 @@ export default function CheckoutStep() {
     }));
     const res = await deliveryApi.createOrder({
       orderType, items, notes: notes.trim() || undefined,
-      addressId: orderType === 'delivery' ? selectedAddressId : undefined,
+      addressId: orderType === 'delivery' && selectedAddressId ? selectedAddressId : undefined,
       paymentMethod,
       changeFor: paymentMethod === 'cash' && changeFor
         ? Number(changeFor.replace(',', '.')) : undefined,
