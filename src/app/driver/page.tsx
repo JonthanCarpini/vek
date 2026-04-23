@@ -363,7 +363,7 @@ function OrderCard({
               {order.deliveryAddress}
               {order.distanceKm && (
                 <span className="text-xs text-gray-400 block mt-0.5">
-                  ~{order.distanceKm.toFixed(1)} km da loja
+                  ~{Number(order.distanceKm).toFixed(1)} km da loja
                 </span>
               )}
             </div>
