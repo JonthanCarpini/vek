@@ -10,7 +10,8 @@ import { prisma } from '@/lib/prisma';
 export async function GET(req: NextRequest) {
   try {
     const g = requireCustomer(req);
-    if (!g.ok) return g.res;
+    // Visitante não logado: retorna 200 com customer null (evita 401 no console)
+    if (!g.ok) return ok({ customer: null });
 
     const customer = await prisma.customer.findUnique({
       where: { id: g.customer.sub },
