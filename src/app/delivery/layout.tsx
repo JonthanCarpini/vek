@@ -65,7 +65,10 @@ function Shell({ children }: { children: React.ReactNode }) {
   });
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    // Força tema claro só neste escopo (o body global é dark para admin).
+    // Tailwind "text-gray-800" garante cor padrão legível para elementos
+    // sem classe explícita (títulos, textareas, inputs, etc.).
+    <div className="min-h-screen bg-gray-50 text-gray-800 delivery-theme">
       <div {...(canSwipe ? swipeHandlers : {})} className={hideNav ? '' : 'pb-20'}>
         {children}
       </div>
