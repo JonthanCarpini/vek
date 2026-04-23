@@ -4,6 +4,7 @@ import { use } from 'react';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { OrderTrackingView } from '@/components/OrderTrackingView';
+import { PushToggle } from '../../_components/PushToggle';
 
 export default function DeliveryOrderTrackingPage({
   params,
@@ -24,6 +25,10 @@ export default function DeliveryOrderTrackingPage({
           <h1 className="font-semibold text-gray-800">Detalhes do pedido</h1>
         </div>
       </header>
+      {/* Prompt de notificação — só aparece se o browser suporta e a loja tem VAPID configurado */}
+      <div className="max-w-md mx-auto px-4 pt-3">
+        <PushToggle />
+      </div>
       <OrderTrackingView orderId={id} heroLabel="Pedido" inline />
     </div>
   );
