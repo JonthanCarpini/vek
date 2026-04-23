@@ -1,196 +1,608 @@
 'use client';
-import { useEffect, useState } from 'react';
-import { apiFetch, loadStaff } from '@/lib/staff-client';
-import { getSocket, joinRooms } from '@/lib/socket-client';
-import { formatBRL } from '@/lib/format';
 
-const STATUS_FILTERS = ['all', 'received', 'accepted', 'preparing', 'ready', 'delivered', 'cancelled'];
-const STATUS_LABEL: Record<string, string> = {
-  all: 'Todos', received: 'Recebido', accepted: 'Aceito', preparing: 'Em preparo',
-  ready: 'Pronto', delivered: 'Entregue', cancelled: 'Cancelado',
-};
-const NEXT_STATUS: Record<string, { to: string; label: string } | null> = {
-  received: { to: 'accepted', label: 'Aceitar' },
-  accepted: { to: 'preparing', label: 'Iniciar preparo' },
-  preparing: { to: 'ready', label: 'Marcar pronto' },
-  ready: { to: 'delivered', label: 'Entregar' },
-  delivered: null,
-  cancelled: null,
+import { useEffect, useMemo, useState } from 'react';
+import { apiFetch } from '@/lib/staff-client';
+import { getSocket } from '@/lib/socket-client';
+import {
+  RefreshCw, Search, ChevronDown, ChevronUp, MapPin, User, Phone,
+  Bike, ShoppingBag, UtensilsCrossed, ExternalLink, Truck,
+} from 'lucide-react';
+
+// Dicionário de status — inclui transições de delivery (dispatched).
+const STATUS_LABELS: Record<string, { label: string; dot: string; chip: string }> = {
+  received:   { label: 'Recebido',      dot: 'bg-sky-500',     chip: 'bg-sky-500/15 text-sky-300 border-sky-500/30' },
+  accepted:   { label: 'Confirmado',    dot: 'bg-indigo-500',  chip: 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30' },
+  preparing:  { label: 'Em preparo',    dot: 'bg-amber-500',   chip: 'bg-amber-500/15 text-amber-300 border-amber-500/30' },
+  ready:      { label: 'Pronto',        dot: 'bg-emerald-500', chip: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' },
+  dispatched: { label: 'Saiu p/ entrega', dot: 'bg-purple-500', chip: 'bg-purple-500/15 text-purple-300 border-purple-500/30' },
+  delivered:  { label: 'Entregue',      dot: 'bg-gray-500',    chip: 'bg-gray-500/15 text-gray-300 border-gray-500/30' },
+  cancelled:  { label: 'Cancelado',     dot: 'bg-red-500',     chip: 'bg-red-500/15 text-red-300 border-red-500/30' },
 };
 
-export default function AdminOrders() {
+// Próximo status na esteira — respeita o canal (delivery termina em dispatched→delivered, dine-in em ready→delivered).
+const NEXT_STATUS_DINEIN: Record<string, string | null> = {
+  received: 'accepted',
+  accepted: 'preparing',
+  preparing: 'ready',
+  ready: 'delivered',
+};
+const NEXT_STATUS_DELIVERY: Record<string, string | null> = {
+  received: 'accepted',
+  accepted: 'preparing',
+  preparing: 'ready',
+  ready: 'dispatched',
+  dispatched: 'delivered',
+};
+const NEXT_STATUS_TAKEOUT: Record<string, string | null> = {
+  received: 'accepted',
+  accepted: 'preparing',
+  preparing: 'ready',
+  ready: 'delivered',
+};
+
+type Channel = 'dine-in' | 'delivery' | 'ifood';
+
+interface ChannelMeta {
+  label: string;
+  icon: typeof UtensilsCrossed;
+  chip: string;
+}
+const CHANNEL_META: Record<Channel, ChannelMeta> = {
+  'dine-in':  { label: 'Mesa',     icon: UtensilsCrossed, chip: 'bg-orange-500/15 text-orange-300 border-orange-500/30' },
+  delivery:   { label: 'Delivery', icon: Bike,            chip: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' },
+  ifood:      { label: 'iFood',    chip: 'bg-red-500/15 text-red-300 border-red-500/30', icon: ShoppingBag },
+};
+
+function formatBRL(v: number) {
+  return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+function formatTime(d: string | Date) {
+  return new Date(d).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+// Opções do filtro de status — agrupa "em andamento" como sentinela especial.
+const STATUS_FILTERS = [
+  { value: 'active',     label: 'Em andamento' },
+  { value: 'received',   label: 'Recebidos' },
+  { value: 'accepted',   label: 'Confirmados' },
+  { value: 'preparing',  label: 'Em preparo' },
+  { value: 'ready',      label: 'Prontos' },
+  { value: 'dispatched', label: 'Saíram' },
+  { value: 'delivered',  label: 'Entregues' },
+  { value: 'all',        label: 'Todos' },
+] as const;
+type StatusFilter = typeof STATUS_FILTERS[number]['value'];
+
+const ACTIVE_STATUSES = ['received', 'accepted', 'preparing', 'ready', 'dispatched'];
+
+export default function AdminOrdersPage() {
   const [orders, setOrders] = useState<any[]>([]);
-  const [filter, setFilter] = useState('all');
-  const [selectedOrder, setSelectedOrder] = useState<any>(null);
+  const [drivers, setDrivers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('active');
+  const [channelFilter, setChannelFilter] = useState<'all' | Channel>('all');
+  const [search, setSearch] = useState('');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  useEffect(() => { load(); }, [filter]);
+  const load = async () => {
+    try {
+      // 'active' é tratado no cliente (filtramos por set de status abaixo)
+      const qsStatus = statusFilter === 'active' ? 'all' : statusFilter;
+      const qsChannel = channelFilter;
+      const data = await apiFetch(`/api/v1/admin/orders?status=${qsStatus}&channel=${qsChannel}&limit=200`);
+      setOrders(data.orders || []);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadDrivers = async () => {
+    try {
+      const data = await apiFetch('/api/v1/admin/drivers?active=true');
+      setDrivers(data?.drivers || []);
+    } catch {}
+  };
+
   useEffect(() => {
-    const s = loadStaff(); if (s?.user.unitId) joinRooms([`unit:${s.user.unitId}:dashboard`]);
-    const sock = getSocket(); const r = () => load();
-    sock.on('order.created', r); sock.on('order.updated', r);
-    return () => { sock.off('order.created', r); sock.off('order.updated', r); };
+    setLoading(true);
+    load();
+  }, [statusFilter, channelFilter]);
+
+  useEffect(() => {
+    loadDrivers();
+    // Socket — reage a novos pedidos e mudanças de status
+    const socket = getSocket();
+    const refresh = () => load();
+    socket.on('order.created', refresh);
+    socket.on('order.updated', refresh);
+    socket.on('order.status_changed', refresh);
+    const timer = setInterval(load, 20_000);
+    return () => {
+      socket.off('order.created', refresh);
+      socket.off('order.updated', refresh);
+      socket.off('order.status_changed', refresh);
+      clearInterval(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function load() {
-    try {
-      const q = filter === 'all' ? '' : `?status=${filter}`;
-      const d = await apiFetch(`/api/v1/admin/orders${q}`);
-      setOrders(d.orders);
-    } catch {}
-  }
+  const filteredOrders = useMemo(() => {
+    let list = orders;
+    if (statusFilter === 'active') {
+      list = list.filter((o) => ACTIVE_STATUSES.includes(o.status));
+    }
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      list = list.filter((o) =>
+        String(o.sequenceNumber).includes(q) ||
+        (o.customerName && o.customerName.toLowerCase().includes(q)) ||
+        (o.customerPhone && o.customerPhone.includes(q)) ||
+        (o.deliveryAddress && o.deliveryAddress.toLowerCase().includes(q)),
+      );
+    }
+    return list;
+  }, [orders, statusFilter, search]);
 
-  async function advance(id: string, to: string) {
+  // Contadores por canal (antes de aplicar filtro de status) para os chips topo
+  const channelCounts = useMemo(() => {
+    const active = orders.filter((o) => ACTIVE_STATUSES.includes(o.status));
+    return {
+      all: active.length,
+      'dine-in': active.filter((o) => o.channel === 'dine-in').length,
+      delivery: active.filter((o) => o.channel === 'delivery').length,
+      ifood: active.filter((o) => o.channel === 'ifood').length,
+    };
+  }, [orders]);
+
+  const advanceStatus = async (order: any, nextStatus: string) => {
     try {
-      await apiFetch(`/api/v1/kitchen/orders/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status: to }) });
+      if (order.channel === 'delivery' || order.channel === 'ifood') {
+        // Delivery usa o endpoint dedicado que dispara push/WhatsApp
+        await apiFetch(`/api/v1/admin/delivery/orders/${order.id}/status`, {
+          method: 'POST',
+          body: JSON.stringify({ status: nextStatus }),
+        });
+      } else {
+        await apiFetch(`/api/v1/kitchen/orders/${order.id}/status`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status: nextStatus }),
+        });
+      }
       load();
-    } catch (e: any) { alert(e.message); }
-  }
-  async function cancel(id: string) {
-    if (!confirm('Cancelar este pedido?')) return;
+    } catch (e: any) {
+      alert(e.message || 'Falha ao atualizar status');
+    }
+  };
+
+  const cancelOrder = async (order: any) => {
+    const reason = prompt('Motivo do cancelamento?');
+    if (reason === null) return;
     try {
-      await apiFetch(`/api/v1/kitchen/orders/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'cancelled' }) });
+      if (order.channel === 'delivery' || order.channel === 'ifood') {
+        await apiFetch(`/api/v1/admin/delivery/orders/${order.id}/status`, {
+          method: 'POST',
+          body: JSON.stringify({ status: 'cancelled', reason }),
+        });
+      } else {
+        await apiFetch(`/api/v1/kitchen/orders/${order.id}/status`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status: 'cancelled' }),
+        });
+      }
       load();
-    } catch (e: any) { alert(e.message); }
-  }
+    } catch (e: any) {
+      alert(e.message || 'Falha ao cancelar');
+    }
+  };
+
+  const assignDriver = async (order: any, driverId: string | null) => {
+    try {
+      await apiFetch(`/api/v1/admin/delivery/orders/${order.id}/assign-driver`, {
+        method: 'POST',
+        body: JSON.stringify({ driverId }),
+      });
+      load();
+    } catch (e: any) {
+      alert(e.message || 'Falha ao atribuir motoboy');
+    }
+  };
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-4">Pedidos</h1>
-      <div className="flex gap-2 flex-wrap mb-4">
-        {STATUS_FILTERS.map((s) => (
-          <button key={s} onClick={() => setFilter(s)}
-            className={`px-3 py-1.5 rounded-full text-sm ${filter === s ? 'bg-brand-600 text-white' : 'bg-[#1f1f2b]'}`}>
-            {STATUS_LABEL[s]}
+    <div className="p-4 md:p-6 space-y-4">
+      <header className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Pedidos</h1>
+          <p className="text-sm text-gray-400">
+            Acompanhe e gerencie todos os pedidos (mesa, delivery, iFood)
+          </p>
+        </div>
+        <button
+          onClick={load}
+          className="btn btn-secondary text-sm flex items-center gap-2"
+        >
+          <RefreshCw className="w-4 h-4" /> Atualizar
+        </button>
+      </header>
+
+      {/* Chips de canal + busca */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <ChannelChip
+          active={channelFilter === 'all'}
+          onClick={() => setChannelFilter('all')}
+          label="Todos"
+          count={channelCounts.all}
+        />
+        <ChannelChip
+          active={channelFilter === 'dine-in'}
+          onClick={() => setChannelFilter('dine-in')}
+          label="Mesa"
+          Icon={UtensilsCrossed}
+          count={channelCounts['dine-in']}
+        />
+        <ChannelChip
+          active={channelFilter === 'delivery'}
+          onClick={() => setChannelFilter('delivery')}
+          label="Delivery"
+          Icon={Bike}
+          count={channelCounts.delivery}
+        />
+        <ChannelChip
+          active={channelFilter === 'ifood'}
+          onClick={() => setChannelFilter('ifood')}
+          label="iFood"
+          Icon={ShoppingBag}
+          count={channelCounts.ifood}
+        />
+        <div className="ml-auto relative">
+          <Search className="w-4 h-4 text-gray-500 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por # nome, telefone, endereço"
+            className="input pl-9 w-64"
+          />
+        </div>
+      </div>
+
+      {/* Filtro de status — dropdown horizontal */}
+      <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1" data-no-tab-swipe>
+        {STATUS_FILTERS.map((f) => (
+          <button
+            key={f.value}
+            onClick={() => setStatusFilter(f.value)}
+            className={`whitespace-nowrap px-3 py-1.5 text-xs rounded-full border transition ${
+              statusFilter === f.value
+                ? 'bg-orange-500 border-orange-500 text-white'
+                : 'bg-[var(--card)] border-[var(--border)] text-gray-300 hover:bg-white/5'
+            }`}
+          >
+            {f.label}
           </button>
         ))}
       </div>
-      <div className="card overflow-hidden">
-        {/* Desktop Table View */}
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-[#1f1f2b] text-left">
-              <tr>
-                <th className="p-3">#</th><th className="p-3">Mesa</th><th className="p-3">Cliente</th>
-                <th className="p-3">Itens</th><th className="p-3">Total</th>
-                <th className="p-3">Status</th><th className="p-3">Hora</th><th className="p-3">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {orders.map((o: any) => (
-                <tr key={o.id} className="border-t border-[color:var(--border)]">
-                  <td className="p-3 font-bold">#{o.sequenceNumber}</td>
-                  <td className="p-3">{o.table?.number}</td>
-                  <td className="p-3">{o.session?.customerName}</td>
-                  <td className="p-3">{o.items.length}</td>
-                  <td className="p-3 font-semibold">{formatBRL(o.total)}</td>
-                  <td className="p-3"><span className="badge">{STATUS_LABEL[o.status]}</span></td>
-                  <td className="p-3 text-gray-400">{new Date(o.createdAt).toLocaleTimeString('pt-BR')}</td>
-                  <td className="p-3 text-right">
-                    <div className="flex gap-1 justify-end">
-                      {NEXT_STATUS[o.status] && (
-                        <button onClick={() => advance(o.id, NEXT_STATUS[o.status]!.to)} className="btn btn-primary text-xs px-2 py-1">
-                          {NEXT_STATUS[o.status]!.label}
-                        </button>
-                      )}
-                      {o.status !== 'cancelled' && o.status !== 'delivered' && (
-                        <button onClick={() => cancel(o.id)} className="btn btn-ghost text-xs px-2 py-1 text-red-400">Cancelar</button>
-                      )}
-                      <button onClick={() => setSelectedOrder(o)} className="btn btn-ghost text-xs px-2 py-1 text-brand-400 border border-brand-500/20">Ver Itens</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {orders.length === 0 && <tr><td colSpan={8} className="p-6 text-center text-gray-500">Nenhum pedido</td></tr>}
-            </tbody>
-          </table>
+
+      {/* Lista */}
+      {loading ? (
+        <div className="text-center py-16 text-gray-400">Carregando...</div>
+      ) : filteredOrders.length === 0 ? (
+        <div className="card text-center py-16 text-gray-400">
+          Nenhum pedido encontrado
         </div>
-
-        {/* Mobile Card View */}
-        <div className="md:hidden divide-y divide-[color:var(--border)]">
-          {orders.map((o: any) => (
-            <div key={o.id} className="p-4 flex flex-col gap-3">
-              <div className="flex justify-between items-start">
-                <div>
-                  <div className="font-black text-lg">#{o.sequenceNumber}</div>
-                  <div className="text-xs text-gray-500 uppercase">Mesa {o.table?.number} • {o.session?.customerName}</div>
-                </div>
-                <span className="badge">{STATUS_LABEL[o.status]}</span>
-              </div>
-              
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-400">{o.items.length} itens</span>
-                <span className="font-black text-brand-500">{formatBRL(o.total)}</span>
-              </div>
-
-              <div className="text-[10px] text-gray-600">
-                {new Date(o.createdAt).toLocaleString('pt-BR')}
-              </div>
-
-              <div className="flex gap-2 flex-wrap">
-                {NEXT_STATUS[o.status] && (
-                  <button onClick={() => advance(o.id, NEXT_STATUS[o.status]!.to)} className="btn btn-primary text-xs flex-1 py-2">
-                    {NEXT_STATUS[o.status]!.label}
-                  </button>
-                )}
-                <button onClick={() => setSelectedOrder(o)} className="btn btn-ghost text-xs px-3 py-2 text-brand-400 border border-brand-500/20">Ver Itens</button>
-                {o.status !== 'cancelled' && o.status !== 'delivered' && (
-                  <button onClick={() => cancel(o.id)} className="btn btn-ghost text-xs px-3 py-2 text-red-400">Cancelar</button>
-                )}
-              </div>
-            </div>
+      ) : (
+        <div className="space-y-3">
+          {filteredOrders.map((o) => (
+            <OrderCard
+              key={o.id}
+              order={o}
+              expanded={expandedId === o.id}
+              onToggle={() => setExpandedId(expandedId === o.id ? null : o.id)}
+              drivers={drivers}
+              onAdvance={advanceStatus}
+              onCancel={cancelOrder}
+              onAssignDriver={assignDriver}
+            />
           ))}
-          {orders.length === 0 && <div className="p-10 text-center text-gray-500">Nenhum pedido</div>}
         </div>
-      </div>
+      )}
+    </div>
+  );
+}
 
-      {/* Modal de Detalhes */}
-      {selectedOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="bg-[#13131a] border border-gray-800 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
-            <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-[#1f1f2b]">
-              <div>
-                <h3 className="text-lg font-bold">Detalhes do Pedido #{selectedOrder.sequenceNumber}</h3>
-                <div className="text-xs text-gray-400">Mesa {selectedOrder.table?.number} • {selectedOrder.session?.customerName}</div>
-              </div>
-              <button onClick={() => setSelectedOrder(null)} className="text-gray-400 hover:text-white text-2xl">&times;</button>
+// ========== SUBCOMPONENTES ==========
+
+function ChannelChip({
+  active, onClick, label, count, Icon,
+}: {
+  active: boolean; onClick: () => void; label: string; count?: number;
+  Icon?: typeof UtensilsCrossed;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border transition ${
+        active
+          ? 'bg-orange-500 border-orange-500 text-white'
+          : 'bg-[var(--card)] border-[var(--border)] text-gray-300 hover:bg-white/5'
+      }`}
+    >
+      {Icon && <Icon className="w-4 h-4" />}
+      {label}
+      {count != null && count > 0 && (
+        <span className={`ml-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+          active ? 'bg-white/20' : 'bg-white/10'
+        }`}>
+          {count}
+        </span>
+      )}
+    </button>
+  );
+}
+
+function OrderCard({
+  order: o, expanded, onToggle, drivers, onAdvance, onCancel, onAssignDriver,
+}: {
+  order: any;
+  expanded: boolean;
+  onToggle: () => void;
+  drivers: any[];
+  onAdvance: (o: any, next: string) => void;
+  onCancel: (o: any) => void;
+  onAssignDriver: (o: any, driverId: string | null) => void;
+}) {
+  const channel = (o.channel || 'dine-in') as Channel;
+  const meta = CHANNEL_META[channel];
+  const ChannelIcon = meta.icon;
+  const statusInfo = STATUS_LABELS[o.status] || { label: o.status, dot: 'bg-gray-500', chip: 'bg-gray-500/15 text-gray-300 border-gray-500/30' };
+  const isTakeout = o.orderType === 'takeout';
+  const isDelivery = o.orderType === 'delivery' && channel !== 'dine-in';
+
+  const nextMap = channel === 'dine-in'
+    ? NEXT_STATUS_DINEIN
+    : isTakeout ? NEXT_STATUS_TAKEOUT : NEXT_STATUS_DELIVERY;
+  const next = nextMap[o.status];
+
+  return (
+    <div className="card overflow-hidden">
+      {/* Header */}
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full p-4 text-left hover:bg-white/5 transition"
+      >
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div className="flex-1 min-w-0">
+            {/* Linha 1: número + badges */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-bold text-lg">#{o.sequenceNumber}</span>
+
+              <span className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border ${meta.chip}`}>
+                <ChannelIcon className="w-3 h-3" />
+                {meta.label}
+                {channel !== 'dine-in' && o.orderType && (
+                  <span className="opacity-70">· {isTakeout ? 'Retirada' : 'Entrega'}</span>
+                )}
+              </span>
+
+              <span className={`flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full border ${statusInfo.chip}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${statusInfo.dot}`} />
+                {statusInfo.label}
+              </span>
+
+              {o.paymentStatus === 'paid' && (
+                <span className="text-xs px-2 py-0.5 rounded-full bg-green-600/20 text-green-400 border border-green-500/30">
+                  Pago
+                </span>
+              )}
+
+              {channel === 'dine-in' && o.table?.number && !o.table?.virtual && (
+                <span className="text-xs px-2 py-0.5 rounded-full bg-white/5 text-gray-300 border border-[var(--border)]">
+                  Mesa {o.table.number}
+                </span>
+              )}
             </div>
-            <div className="p-4 max-h-[60vh] overflow-y-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-gray-500 text-left border-b border-gray-800">
-                    <th className="py-2">Item</th>
-                    <th className="py-2 text-center">Qtd</th>
-                    <th className="py-2 text-right">Preço</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-800">
-                  {selectedOrder.items.map((it: any) => (
-                    <tr key={it.id}>
-                      <td className="py-3">
-                        <div className="font-medium">{it.name}</div>
-                        {it.notes && <div className="text-xs text-brand-400 italic">"{it.notes}"</div>}
-                      </td>
-                      <td className="py-3 text-center">{it.quantity}</td>
-                      <td className="py-3 text-right">{formatBRL(Number(it.unitPrice))}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              
-              {selectedOrder.notes && (
-                <div className="mt-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-sm text-amber-200">
-                  <div className="font-bold mb-1">Observações do Pedido:</div>
-                  {selectedOrder.notes}
+
+            {/* Linha 2: cliente/endereço */}
+            <div className="mt-2 space-y-0.5 text-sm">
+              {o.customerName && (
+                <div className="flex items-center gap-1.5 text-gray-300">
+                  <User className="w-3.5 h-3.5 text-gray-500" />
+                  <span>{o.customerName}</span>
+                  {o.customerPhone && (
+                    <span className="text-gray-500">· {o.customerPhone}</span>
+                  )}
+                </div>
+              )}
+              {isDelivery && o.deliveryAddress && (
+                <div className="flex items-start gap-1.5 text-gray-400 text-xs">
+                  <MapPin className="w-3.5 h-3.5 text-gray-500 flex-shrink-0 mt-0.5" />
+                  <span className="truncate">{o.deliveryAddress}</span>
+                  {o.distanceKm != null && (
+                    <span className="text-gray-500 flex-shrink-0">· {o.distanceKm}km</span>
+                  )}
+                </div>
+              )}
+              {isDelivery && o.driver && (
+                <div className="flex items-center gap-1.5 text-purple-300 text-xs">
+                  <Bike className="w-3.5 h-3.5" />
+                  <span>{o.driver.name}</span>
                 </div>
               )}
             </div>
-            <div className="p-4 bg-[#1f1f2b] border-t border-gray-800 flex justify-between items-center">
-              <div className="text-sm text-gray-400">Total</div>
-              <div className="text-xl font-black text-brand-500">{formatBRL(selectedOrder.total)}</div>
+          </div>
+
+          {/* Total + hora */}
+          <div className="text-right flex-shrink-0">
+            <div className="font-bold text-orange-400 text-lg">{formatBRL(o.total)}</div>
+            <div className="text-xs text-gray-500">{formatTime(o.createdAt)}</div>
+            <div className="text-[10px] text-gray-500 mt-1 flex items-center gap-1 justify-end">
+              {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+              {expanded ? 'ocultar' : 'detalhes'}
             </div>
           </div>
         </div>
+      </button>
+
+      {/* Expanded */}
+      {expanded && (
+        <div className="border-t border-[var(--border)] bg-black/20 p-4 space-y-4">
+          {/* Itens */}
+          <div>
+            <h4 className="text-xs font-semibold text-gray-400 uppercase mb-1">Itens</h4>
+            <div className="space-y-1 text-sm">
+              {o.items.map((i: any) => (
+                <div key={i.id} className="flex justify-between gap-3">
+                  <span className="text-gray-200">
+                    <span className="text-gray-500">{i.quantity}×</span> {i.name}
+                    {i.notes && <span className="block text-xs text-gray-500 italic">{i.notes}</span>}
+                  </span>
+                  <span className="text-gray-300 flex-shrink-0">{formatBRL(i.totalPrice)}</span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-2 pt-2 border-t border-[var(--border)] text-sm space-y-0.5">
+              <div className="flex justify-between text-gray-400">
+                <span>Subtotal</span>
+                <span>{formatBRL(o.subtotal)}</span>
+              </div>
+              {o.deliveryFee > 0 && (
+                <div className="flex justify-between text-gray-400">
+                  <span>Taxa de entrega{o.distanceKm ? ` (${o.distanceKm}km)` : ''}</span>
+                  <span>{formatBRL(o.deliveryFee)}</span>
+                </div>
+              )}
+              <div className="flex justify-between font-semibold text-orange-400">
+                <span>Total</span>
+                <span>{formatBRL(o.total)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Meta grid */}
+          <div className="grid sm:grid-cols-2 gap-3 text-sm">
+            {o.paymentMethod && (
+              <InfoBlock label="Pagamento">
+                {o.paymentMethod}
+                {o.changeFor ? ` (troco para ${formatBRL(o.changeFor)})` : ''}
+                {o.paymentStatus && (
+                  <span className="ml-1 text-xs text-gray-500">({o.paymentStatus})</span>
+                )}
+              </InfoBlock>
+            )}
+            {isDelivery && o.deliveryAddress && (
+              <InfoBlock label="Endereço completo">
+                <span className="text-gray-200">{o.deliveryAddress}</span>
+                {o.deliveryLat != null && o.deliveryLng != null && (
+                  <a
+                    href={`https://www.google.com/maps/search/?api=1&query=${o.deliveryLat},${o.deliveryLng}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 ml-2 text-orange-400 hover:underline text-xs"
+                  >
+                    <ExternalLink className="w-3 h-3" /> Maps
+                  </a>
+                )}
+              </InfoBlock>
+            )}
+            {o.customerPhone && (
+              <InfoBlock label="Telefone">
+                <a href={`tel:${o.customerPhone}`} className="text-gray-200 hover:text-orange-400">
+                  <Phone className="w-3 h-3 inline mr-1" />
+                  {o.customerPhone}
+                </a>
+                <a
+                  href={`https://wa.me/${o.customerPhone.replace(/\D/g, '')}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ml-2 text-emerald-400 hover:underline text-xs"
+                >
+                  WhatsApp
+                </a>
+              </InfoBlock>
+            )}
+            {o.notes && (
+              <InfoBlock label="Observações">
+                {o.notes}
+              </InfoBlock>
+            )}
+          </div>
+
+          {/* Atribuição de motoboy (somente pedidos de entrega) */}
+          {isDelivery && ['accepted', 'preparing', 'ready', 'dispatched'].includes(o.status) && (
+            <div>
+              <h4 className="text-xs font-semibold text-gray-400 uppercase mb-1.5 flex items-center gap-1.5">
+                <Truck className="w-3.5 h-3.5" /> Entregador
+              </h4>
+              <div className="flex items-center gap-2 flex-wrap">
+                <select
+                  value={o.driver?.id || ''}
+                  onChange={(e) => onAssignDriver(o, e.target.value || null)}
+                  className="input text-sm flex-1 sm:flex-initial sm:min-w-[200px]"
+                >
+                  <option value="">— Não atribuído —</option>
+                  {drivers.map((d) => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
+                {o.driver?.phone && (
+                  <a
+                    href={`tel:${o.driver.phone}`}
+                    className="text-sm text-gray-400 hover:text-orange-400 flex items-center gap-1"
+                  >
+                    <Phone className="w-3.5 h-3.5" /> {o.driver.phone}
+                  </a>
+                )}
+              </div>
+              {drivers.length === 0 && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Nenhum motoboy cadastrado. Cadastre em <a href="/admin/drivers" className="text-orange-400 hover:underline">Motoboys</a>.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Ações */}
+          <div className="flex gap-2 flex-wrap pt-3 border-t border-[var(--border)]">
+            {next && o.status !== 'cancelled' && (
+              <button
+                onClick={() => onAdvance(o, next)}
+                className="btn btn-primary text-sm py-1.5 px-3"
+                style={{ minHeight: 'auto' }}
+              >
+                → {STATUS_LABELS[next].label}
+              </button>
+            )}
+            {o.status !== 'cancelled' && o.status !== 'delivered' && (
+              <button
+                onClick={() => onCancel(o)}
+                className="bg-red-600/10 border border-red-500/30 text-red-400 hover:bg-red-600/20 px-3 py-1.5 text-sm rounded-lg"
+              >
+                Cancelar
+              </button>
+            )}
+            {(channel === 'delivery' || channel === 'ifood') && (
+              <a
+                href={`/t/${o.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-[var(--card)] border border-[var(--border)] text-gray-300 hover:bg-white/5 px-3 py-1.5 text-sm rounded-lg flex items-center gap-1.5"
+              >
+                <ExternalLink className="w-3.5 h-3.5" /> Tracking público
+              </a>
+            )}
+          </div>
+        </div>
       )}
+    </div>
+  );
+}
+
+function InfoBlock({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <h4 className="text-xs font-semibold text-gray-400 uppercase mb-0.5">{label}</h4>
+      <div className="text-gray-200 text-sm">{children}</div>
     </div>
   );
 }
