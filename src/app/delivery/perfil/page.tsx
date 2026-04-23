@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useDelivery } from '../_lib/context';
 import { deliveryApi, maskPhone } from '../_lib/api';
+import { PushToggle } from '../_components/PushToggle';
 
 export default function PerfilPage() {
   const router = useRouter();
@@ -57,6 +58,9 @@ export default function PerfilPage() {
             href="/delivery/enderecos"
           />
         </div>
+
+        {/* Toggle de notificações push — só aparece se o browser suporta e a loja configurou VAPID */}
+        <PushToggle />
 
         <div className="bg-white rounded-xl overflow-hidden">
           <div className="p-4 flex items-start gap-3">

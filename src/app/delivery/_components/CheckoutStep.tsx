@@ -15,7 +15,7 @@ export default function CheckoutStep() {
     selectedAddressId, clearCart, reloadOrders,
   } = useDelivery();
 
-  const [quote, setQuote] = useState<{ fee: number; estimatedMinutes: number; distanceKm: number } | null>(null);
+  const [quote, setQuote] = useState<{ fee: number; estimatedMinutes: number; distanceKm: number; outOfRange: boolean } | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [address, setAddress] = useState<any | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
@@ -44,6 +44,7 @@ export default function CheckoutStep() {
                 fee: q.data.fee,
                 estimatedMinutes: q.data.estimatedMinutes,
                 distanceKm: q.data.distanceKm,
+                outOfRange: !!q.data.outOfRange,
               });
             }
           }
@@ -68,8 +69,19 @@ export default function CheckoutStep() {
     (m) => availableMethods.includes(m.id) || m.id === 'online',
   );
 
+  const isStoreOpen = unit?.state?.isOpen ?? true;
+  const outOfRange = orderType === 'delivery' && !!quote?.outOfRange;
+
   const handleSubmit = async () => {
     setError(null);
+    if (!isStoreOpen) {
+      setError('A loja está fechada no momento. Não é possível fazer pedidos agora.');
+      return;
+    }
+    if (outOfRange) {
+      setError('Endereço fora do raio de entrega. Escolha um endereço mais próximo ou use retirada no balcão.');
+      return;
+    }
     if (orderType === 'delivery' && !selectedAddressId) {
       setError('Selecione um endereço');
       return;
@@ -117,6 +129,24 @@ export default function CheckoutStep() {
       </div>
 
       <div className="max-w-md mx-auto px-4 py-4 space-y-4">
+        {/* Avisos bloqueantes — loja fechada ou fora de raio */}
+        {!isStoreOpen && (
+          <div className="bg-red-50 border border-red-200 text-red-800 rounded-xl p-3 text-sm">
+            <strong>⚠️ Loja fechada.</strong> Você não pode finalizar o pedido agora. Volte quando estivermos abertos.
+          </div>
+        )}
+        {isStoreOpen && outOfRange && quote && (
+          <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-3 text-sm">
+            <strong>📍 Endereço fora de área.</strong> Distância {quote.distanceKm}km — excede nosso raio de entrega.
+            <button
+              onClick={() => goTo('address')}
+              className="block mt-2 text-amber-900 font-semibold underline"
+            >
+              Trocar de endereço
+            </button>
+          </div>
+        )}
+
         {/* Endereço / Retirada */}
         <div className="bg-white rounded-xl p-4">
           <h2 className="font-semibold mb-2">
@@ -247,10 +277,21 @@ export default function CheckoutStep() {
         <div className="max-w-md mx-auto">
           <button
             onClick={handleSubmit}
-            disabled={submitting || paymentMethod === 'online' || (orderType === 'delivery' && quoteLoading)}
+            disabled={
+              submitting ||
+              paymentMethod === 'online' ||
+              !isStoreOpen ||
+              outOfRange ||
+              (orderType === 'delivery' && quoteLoading)
+            }
             className="w-full bg-orange-500 hover:bg-orange-600 disabled:bg-gray-300 text-white font-semibold py-3 rounded-lg transition flex items-center justify-between px-4"
           >
-            <span>{submitting ? 'Enviando...' : 'Confirmar pedido'}</span>
+            <span>
+              {submitting ? 'Enviando...'
+                : !isStoreOpen ? 'Loja fechada'
+                : outOfRange ? 'Fora da área de entrega'
+                : 'Confirmar pedido'}
+            </span>
             <span>{formatBRL(total)}</span>
           </button>
         </div>

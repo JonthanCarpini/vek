@@ -346,6 +346,19 @@ The landing page `/` offers two entry points: "Escanear Mesa" (in-restaurant QR 
 
 Faz polling 15s + socket `driver.location` / `order.status_changed` / `order.updated` na room `order:{id}`.
 
+**Mapa ao vivo (Leaflet + OpenStreetMap):** Quando `status === 'dispatched'`, o tracking renderiza `src/components/LiveDeliveryMap.tsx` com pin do motoboy (🛵), pin de destino (🏠), polyline e auto-fit bounds. Carregado via `next/dynamic({ ssr: false })` para evitar `window is not defined` no SSR. Sem custo — usa tiles OSM gratuitos.
+
+**Geolocalização do motoboy:** O `/driver/page.tsx` usa `navigator.geolocation.watchPosition` (high accuracy) enquanto existe pedido `dispatched`, com throttle de 10s, enviando para `PUT /api/v1/driver/location`. O backend emite `driver.location` na room `order:{id}` para que o cliente veja o pin se mover em tempo real.
+
+**Push Notifications (Web Push / VAPID):**
+- **Schema:** `Unit.pushVapidPublicKey/PrivateKey/Subject` + tabela `PushSubscription(endpoint @unique, p256dh, auth, customerId?)` → `@/Users/admin/Documents/Projetos/mesa_digital/prisma/schema.prisma`
+- **Gerador de chaves:** admin acessa Delivery → config → card "Notificações Push (VAPID)" e gera com 1 clique (`POST /api/v1/admin/delivery/push-config`) OU cola manualmente (`PATCH`). Private key é write-only.
+- **Cliente:** `@/Users/admin/Documents/Projetos/mesa_digital/src/app/delivery/_lib/push.ts` — registra service worker `/sw-push.js`, pede permissão e subscribe via `PushManager`. Componente `PushToggle` aparece na tab Perfil só quando (a) browser suporta e (b) loja configurou VAPID.
+- **Service Worker:** `public/sw-push.js` — trata `push` (mostra Notification) e `notificationclick` (abre/foca `/delivery/pedidos/[id]`).
+- **Disparo:** `src/lib/delivery/status.ts` chama `notifyCustomerPush(order)` após emitir sockets; templates por status em `statusPushTemplates`. Endpoints 404/410 são removidos automaticamente.
+- **Endpoints:** `GET /api/v1/delivery/push/config` (public key), `POST /subscribe` (customer auth), `POST /unsubscribe` (sem auth), `GET/PATCH/POST /api/v1/admin/delivery/push-config` (admin).
+- **Migração:** `prisma/migrations/manual/push_notifications.sql` — rodar na VPS ao aplicar (ou `prisma db push`).
+
 ### Key files
 
 | File | Purpose |

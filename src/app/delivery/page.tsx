@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { User } from 'lucide-react';
+import { User, Home } from 'lucide-react';
 import { useDelivery } from './_lib/context';
 import MenuStep from './_components/MenuStep';
 import LoginStep from './_components/LoginStep';
@@ -40,6 +40,14 @@ export default function DeliveryHomePage() {
         <>
           <header className="bg-white border-b sticky top-0 z-20">
             <div className="max-w-3xl mx-auto px-4 py-3 flex items-center gap-3">
+              <Link
+                href="/"
+                className="p-2 hover:bg-gray-100 rounded-full -ml-2 flex-shrink-0"
+                title="Voltar ao início"
+                aria-label="Voltar ao início"
+              >
+                <Home className="w-5 h-5 text-gray-600" />
+              </Link>
               {unit.logoUrl && (
                 <div className="relative w-10 h-10 flex-shrink-0 rounded-full overflow-hidden">
                   <Image src={unit.logoUrl} alt={unit.name} fill sizes="40px" className="object-cover" />

@@ -14,9 +14,10 @@ export default function CartDrawer({ open, onClose }: { open: boolean; onClose: 
 
   const minOrder = unit?.deliveryMinOrder || 0;
   const belowMin = orderType === 'delivery' && cartSubtotal < minOrder;
+  const isStoreOpen = unit?.state?.isOpen ?? true;
 
   const handleNext = () => {
-    if (belowMin) return;
+    if (!isStoreOpen || belowMin) return;
     if (!customer) {
       goTo('login');
     } else if (orderType === 'delivery') {
@@ -117,17 +118,22 @@ export default function CartDrawer({ open, onClose }: { open: boolean; onClose: 
               <span className="text-gray-600">Subtotal</span>
               <span className="font-semibold">{formatBRL(cartSubtotal)}</span>
             </div>
-            {belowMin && (
+            {!isStoreOpen && (
+              <div className="text-xs text-red-700 bg-red-50 border border-red-200 p-2 rounded">
+                ⚠️ Loja fechada. Pedidos serão aceitos quando reabrirmos.
+              </div>
+            )}
+            {isStoreOpen && belowMin && (
               <div className="text-xs text-red-600 bg-red-50 p-2 rounded">
                 Pedido mínimo para delivery: {formatBRL(minOrder)}
               </div>
             )}
             <button
               onClick={handleNext}
-              disabled={belowMin}
+              disabled={belowMin || !isStoreOpen}
               className="w-full bg-orange-500 hover:bg-orange-600 disabled:bg-gray-300 text-white font-semibold py-3 rounded-lg transition"
             >
-              Continuar →
+              {!isStoreOpen ? 'Loja fechada' : 'Continuar →'}
             </button>
             <button
               onClick={() => {

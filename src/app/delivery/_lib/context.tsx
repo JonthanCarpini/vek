@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { deliveryApi } from './api';
 
 export type CartItem = {
@@ -73,7 +73,46 @@ export function DeliveryProvider({ children }: { children: React.ReactNode }) {
   const [customer, setCustomer] = useState<any | null>(null);
   const [loadingUnit, setLoadingUnit] = useState(true);
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [step, setStep] = useState<Step>('menu');
+  const [step, setStepRaw] = useState<Step>('menu');
+
+  // Back-button mobile: sincroniza step com history.pushState/popstate
+  // Ao avançar para sub-step (login/address/checkout), empilhamos um entry no history.
+  // Quando o usuário toca o back button, o popstate dispara e voltamos ao step anterior.
+  const stepStackRef = useRef<Step[]>(['menu']);
+
+  const setStep = useCallback((s: Step) => {
+    setStepRaw((prev) => {
+      if (prev === s) return s;
+      if (typeof window !== 'undefined') {
+        if (s === 'menu') {
+          // Volta ao root: substitui entry atual ao invés de empilhar
+          stepStackRef.current = ['menu'];
+          window.history.replaceState({ deliveryStep: 'menu' }, '');
+        } else {
+          stepStackRef.current = [...stepStackRef.current, s];
+          window.history.pushState({ deliveryStep: s }, '');
+        }
+      }
+      return s;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onPopState = (e: PopStateEvent) => {
+      // Se estamos em sub-step, retrocede na stack; se já em menu, deixa o browser sair normalmente
+      setStepRaw((prev) => {
+        if (prev === 'menu') return prev;
+        const stack = stepStackRef.current;
+        stack.pop();
+        const next = stack[stack.length - 1] || 'menu';
+        stepStackRef.current = next === 'menu' ? ['menu'] : [...stack];
+        return next;
+      });
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
   const [orderType, setOrderType] = useState<'delivery' | 'takeout'>('delivery');
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
   const [orders, setOrders] = useState<any[]>([]);

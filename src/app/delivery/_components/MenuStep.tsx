@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import { Search, Plus, ShoppingCart } from 'lucide-react';
 import { useDelivery } from '../_lib/context';
@@ -27,6 +27,48 @@ export default function MenuStep({ onOpenCart }: { onOpenCart: () => void }) {
 
   const isOpen = unit?.state?.isOpen ?? true;
 
+  // Scroll-spy: detecta qual categoria está visível no topo e marca como ativa.
+  // Usamos IntersectionObserver com rootMargin para antecipar a troca ao rolar.
+  const userClickedRef = useRef<number>(0); // timestamp pra ignorar spy após click manual
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const sections = filteredCategories
+      .map((c: any) => document.getElementById(`cat-${c.id}`))
+      .filter(Boolean) as HTMLElement[];
+    if (sections.length === 0) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        // Se acabamos de clicar numa pill, ignorar por 800ms (senão o scroll suave
+        // sobrescreve nossa seleção manual)
+        if (Date.now() - userClickedRef.current < 800) return;
+
+        // Ordena entries visíveis pelo topo; pega a primeira que cruzou o limiar
+        const visible = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (visible[0]) {
+          const id = visible[0].target.id.replace('cat-', '');
+          setActiveCategory(id);
+        }
+      },
+      {
+        // Faixa superior onde consideramos a categoria "ativa"
+        rootMargin: '-120px 0px -60% 0px',
+        threshold: 0,
+      },
+    );
+    sections.forEach((s) => observer.observe(s));
+    return () => observer.disconnect();
+  }, [filteredCategories]);
+
+  // Mantém a pill ativa sempre visível na barra horizontal
+  useEffect(() => {
+    if (!activeCategory) return;
+    const pill = document.querySelector(`[data-pill-id="${activeCategory}"]`) as HTMLElement | null;
+    pill?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+  }, [activeCategory]);
+
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
       {/* Search bar */}
@@ -41,12 +83,21 @@ export default function MenuStep({ onOpenCart }: { onOpenCart: () => void }) {
               className="w-full pl-10 pr-4 py-2 bg-gray-100 border-0 rounded-lg focus:ring-2 focus:ring-orange-500 focus:bg-white transition"
             />
           </div>
-          {/* Category pills */}
+          {/* Category pills — data-no-tab-swipe impede que o swipe horizontal
+              das pills altere a tab do bottom nav (item 2) */}
           {filteredCategories.length > 1 && (
-            <div className="flex gap-2 mt-3 overflow-x-auto pb-1 -mx-1 px-1">
+            <div
+              data-no-tab-swipe
+              className="flex gap-2 mt-3 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide"
+            >
               <button
-                onClick={() => setActiveCategory(null)}
-                className={`px-3 py-1 text-sm rounded-full whitespace-nowrap ${
+                data-pill-id="__all__"
+                onClick={() => {
+                  userClickedRef.current = Date.now();
+                  setActiveCategory(null);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className={`px-3 py-1 text-sm rounded-full whitespace-nowrap transition ${
                   !activeCategory ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700'
                 }`}
               >
@@ -55,12 +106,18 @@ export default function MenuStep({ onOpenCart }: { onOpenCart: () => void }) {
               {filteredCategories.map((c: any) => (
                 <button
                   key={c.id}
+                  data-pill-id={c.id}
                   onClick={() => {
+                    userClickedRef.current = Date.now();
                     setActiveCategory(c.id);
                     const el = document.getElementById(`cat-${c.id}`);
-                    el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    if (el) {
+                      // Desconta altura do header sticky (~110px) ao rolar
+                      const top = el.getBoundingClientRect().top + window.scrollY - 110;
+                      window.scrollTo({ top, behavior: 'smooth' });
+                    }
                   }}
-                  className={`px-3 py-1 text-sm rounded-full whitespace-nowrap ${
+                  className={`px-3 py-1 text-sm rounded-full whitespace-nowrap transition ${
                     activeCategory === c.id ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700'
                   }`}
                 >

@@ -1,8 +1,15 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { CheckCircle2, Clock, ChefHat, Package, Bike, Check, MapPin } from 'lucide-react';
 import { getSocket, joinRooms } from '@/lib/socket-client';
+
+// Leaflet é carregado só no cliente para evitar erro de window durante SSR
+const LiveDeliveryMap = dynamic(
+  () => import('./LiveDeliveryMap').then((m) => m.LiveDeliveryMap),
+  { ssr: false, loading: () => <div className="h-[300px] rounded-xl bg-gray-100 animate-pulse" /> },
+);
 
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number) {
   const R = 6371;
@@ -170,21 +177,41 @@ export function OrderTrackingView({
 
         {order.driver && (
           <div className="bg-white rounded-xl p-4">
-            <h2 className="font-semibold mb-2">🛵 Entregador</h2>
-            <p className="text-sm text-gray-700">{order.driver.name}</p>
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="font-semibold">🛵 Entregador</h2>
+              {order.status === 'dispatched' &&
+                order.driver.currentLat != null && order.driver.currentLng != null && (
+                <span className="flex items-center gap-1 text-xs text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
+                  <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+                  ao vivo
+                </span>
+              )}
+            </div>
+            <p className="text-sm text-gray-700 mt-1">{order.driver.name}</p>
             {order.driver.phone && (
               <a href={`tel:${order.driver.phone}`} className="text-sm text-orange-600 hover:underline">
                 {order.driver.phone}
               </a>
             )}
-            {order.status === 'dispatched' && order.driver.currentLat != null && order.driver.currentLng != null && (
-              <DriverDistance
-                driverLat={order.driver.currentLat}
-                driverLng={order.driver.currentLng}
-                destLat={order.deliveryLat}
-                destLng={order.deliveryLng}
-                lastLocationAt={order.driver.lastLocationAt}
-              />
+            {order.status === 'dispatched' &&
+              order.driver.currentLat != null && order.driver.currentLng != null &&
+              order.deliveryLat != null && order.deliveryLng != null && (
+                <div className="mt-3">
+                  <LiveDeliveryMap
+                    driverLat={order.driver.currentLat}
+                    driverLng={order.driver.currentLng}
+                    destLat={order.deliveryLat}
+                    destLng={order.deliveryLng}
+                    height={280}
+                  />
+                  <DriverDistance
+                    driverLat={order.driver.currentLat}
+                    driverLng={order.driver.currentLng}
+                    destLat={order.deliveryLat}
+                    destLng={order.deliveryLng}
+                    lastLocationAt={order.driver.lastLocationAt}
+                  />
+                </div>
             )}
           </div>
         )}

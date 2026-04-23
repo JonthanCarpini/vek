@@ -66,6 +66,10 @@ model Unit {
   addressLng            Decimal?  @db.Decimal(10, 7)
   // Chave Google Maps (Geocoding API)
   googleMapsApiKey      String?   @db.Text
+  // Web Push (VAPID) — configurado pelo admin via UI
+  pushVapidPublicKey    String?   @db.Text
+  pushVapidPrivateKey   String?   @db.Text
+  pushVapidSubject      String?   // ex: mailto:contato@loja.com (requerido pelo web-push)
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
@@ -89,6 +93,7 @@ model Unit {
   deliveryAddresses DeliveryAddress[]
   otpCodes          OtpCode[]
   geocodeCache      GeocodeCache[]
+  pushSubscriptions PushSubscription[]
 
   @@index([tenantId])
 }
@@ -425,10 +430,11 @@ model Customer {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  unit      Unit              @relation(fields: [unitId], references: [id])
-  sessions  TableSession[]
-  orders    Order[]
-  addresses DeliveryAddress[]
+  unit              Unit               @relation(fields: [unitId], references: [id])
+  sessions          TableSession[]
+  orders            Order[]
+  addresses         DeliveryAddress[]
+  pushSubscriptions PushSubscription[]
 
   @@unique([unitId, phone])
   @@index([unitId, name])
@@ -525,6 +531,26 @@ model GeocodeCache {
 
   @@unique([unitId, key])
   @@index([createdAt])
+}
+
+/// Web Push subscriptions — uma por device+customer que autorizou notificações.
+/// O endpoint é único (identifica o browser/device), então usamos como @unique.
+model PushSubscription {
+  id         String   @id @default(cuid())
+  unitId     String
+  customerId String?  // opcional: permite push para visitantes tracking pelo /t/[id]
+  endpoint   String   @unique @db.VarChar(500)
+  p256dh     String   @db.VarChar(255) // public key da subscription
+  auth       String   @db.VarChar(255) // auth secret
+  userAgent  String?  @db.VarChar(500)
+  lastSeenAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  unit     Unit      @relation(fields: [unitId], references: [id])
+  customer Customer? @relation(fields: [customerId], references: [id])
+
+  @@index([unitId])
+  @@index([customerId])
 }
 
 model DisplayItem {

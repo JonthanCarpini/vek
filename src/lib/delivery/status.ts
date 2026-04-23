@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { emitToKitchen, emitToDashboard, emitToWaiters, SocketEvents } from '@/lib/socket';
 import { whatsappService } from '@/lib/whatsapp';
+import { sendPushToCustomer, statusPushTemplates } from './push';
 
 export type DeliveryStatus = 'accepted' | 'preparing' | 'ready' | 'dispatched' | 'delivered' | 'cancelled';
 
@@ -70,8 +71,23 @@ export async function updateDeliveryOrderStatus(input: StatusChangeInput): Promi
   emitToDashboard(order.unitId, SocketEvents.ORDER_STATUS_CHANGED, payload);
 
   notifyCustomerStatus(updated).catch((e) => console.error('[Delivery] WhatsApp notify:', e));
+  notifyCustomerPush(updated).catch((e) => console.error('[Delivery] Push notify:', e));
 
   return { ok: true, order: updated };
+}
+
+async function notifyCustomerPush(order: any) {
+  if (!order.customerId) return;
+  const template = statusPushTemplates[order.status];
+  if (!template) return;
+  const payload = template(order.sequenceNumber);
+  payload.url = `/delivery/pedidos/${order.id}`;
+  payload.data = { orderId: order.id, status: order.status };
+  await sendPushToCustomer({
+    unitId: order.unitId,
+    customerId: order.customerId,
+    payload,
+  });
 }
 
 async function notifyCustomerStatus(order: any) {

@@ -6,10 +6,14 @@ import { useDelivery } from '../_lib/context';
 import { deliveryApi, maskCEP } from '../_lib/api';
 
 export default function AddressStep() {
-  const { goTo, setSelectedAddressId, selectedAddressId } = useDelivery();
+  const { goTo, setSelectedAddressId, selectedAddressId, cartSubtotal } = useDelivery();
   const [addresses, setAddresses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+
+  // Mapa addressId -> outOfRange (carregado via quote). Mostra badge no card.
+  const [rangeMap, setRangeMap] = useState<Record<string, { outOfRange: boolean; distanceKm: number } | null>>({});
+  const [checkingId, setCheckingId] = useState<string | null>(null);
 
   const loadAddresses = async () => {
     setLoading(true);
@@ -17,6 +21,16 @@ export default function AddressStep() {
     if (res.ok) {
       setAddresses(res.data.addresses);
       if (res.data.addresses.length === 0) setShowForm(true);
+      // Pré-carrega cobertura para cada endereço com coordenadas (paralelo)
+      const checks = await Promise.all(
+        res.data.addresses
+          .filter((a: any) => a.lat && a.lng)
+          .map(async (a: any) => {
+            const q = await deliveryApi.quote({ lat: a.lat, lng: a.lng, orderSubtotal: cartSubtotal });
+            return [a.id, q.ok ? { outOfRange: !!q.data.outOfRange, distanceKm: q.data.distanceKm } : null] as const;
+          }),
+      );
+      setRangeMap(Object.fromEntries(checks));
     }
     setLoading(false);
   };
@@ -30,7 +44,27 @@ export default function AddressStep() {
     loadAddresses();
   };
 
-  const handleSelect = (id: string) => {
+  const handleSelect = async (id: string) => {
+    // Se já sabemos que está fora de raio, bloqueia direto
+    const info = rangeMap[id];
+    if (info?.outOfRange) {
+      alert(`Este endereço está a ${info.distanceKm}km do restaurante, fora do raio de entrega.`);
+      return;
+    }
+    // Se ainda não checamos, valida sob demanda
+    if (!info) {
+      const addr = addresses.find((a) => a.id === id);
+      if (addr?.lat && addr?.lng) {
+        setCheckingId(id);
+        const q = await deliveryApi.quote({ lat: addr.lat, lng: addr.lng, orderSubtotal: cartSubtotal });
+        setCheckingId(null);
+        if (q.ok && q.data.outOfRange) {
+          setRangeMap((m) => ({ ...m, [id]: { outOfRange: true, distanceKm: q.data.distanceKm } }));
+          alert(`Este endereço está a ${q.data.distanceKm}km do restaurante, fora do raio de entrega.`);
+          return;
+        }
+      }
+    }
     setSelectedAddressId(id);
     goTo('checkout');
   };
@@ -61,44 +95,69 @@ export default function AddressStep() {
         ) : (
           <>
             <div className="space-y-3 mb-4">
-              {addresses.map((a) => (
-                <div
-                  key={a.id}
-                  className={`bg-white rounded-xl p-4 border-2 cursor-pointer transition ${
-                    selectedAddressId === a.id ? 'border-orange-500' : 'border-transparent'
-                  }`}
-                  onClick={() => handleSelect(a.id)}
-                >
-                  <div className="flex items-start gap-3">
-                    <MapPin className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold">{a.label}</span>
-                        {selectedAddressId === a.id && <Check className="w-4 h-4 text-orange-500" />}
-                      </div>
-                      <p className="text-sm text-gray-700 mt-1">
-                        {a.street}, {a.number}
-                        {a.complement && ` - ${a.complement}`}
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        {a.neighborhood}, {a.city}/{a.state}
-                        {a.zipCode && ` - ${a.zipCode}`}
-                      </p>
-                      {!a.lat && (
-                        <p className="text-xs text-red-600 mt-1">
-                          ⚠️ Sem coordenadas. Recadastre para calcular frete.
+              {addresses.map((a) => {
+                const info = rangeMap[a.id];
+                const outOfRange = !!info?.outOfRange;
+                const isChecking = checkingId === a.id;
+                return (
+                  <div
+                    key={a.id}
+                    className={`bg-white rounded-xl p-4 border-2 transition ${
+                      outOfRange ? 'border-amber-300 opacity-80' :
+                      selectedAddressId === a.id ? 'border-orange-500 cursor-pointer' :
+                      'border-transparent cursor-pointer'
+                    }`}
+                    onClick={() => !isChecking && handleSelect(a.id)}
+                  >
+                    <div className="flex items-start gap-3">
+                      <MapPin className={`w-5 h-5 flex-shrink-0 mt-0.5 ${outOfRange ? 'text-amber-500' : 'text-orange-500'}`} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold">{a.label}</span>
+                          {selectedAddressId === a.id && !outOfRange && <Check className="w-4 h-4 text-orange-500" />}
+                          {info && !outOfRange && (
+                            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
+                              {info.distanceKm}km
+                            </span>
+                          )}
+                          {outOfRange && (
+                            <span className="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-medium">
+                              Fora da área ({info!.distanceKm}km)
+                            </span>
+                          )}
+                          {isChecking && (
+                            <span className="text-xs text-gray-500">verificando...</span>
+                          )}
+                        </div>
+                        <p className="text-sm text-gray-700 mt-1">
+                          {a.street}, {a.number}
+                          {a.complement && ` - ${a.complement}`}
                         </p>
-                      )}
+                        <p className="text-sm text-gray-500">
+                          {a.neighborhood}, {a.city}/{a.state}
+                          {a.zipCode && ` - ${a.zipCode}`}
+                        </p>
+                        {!a.lat && (
+                          <p className="text-xs text-red-600 mt-1">
+                            ⚠️ Sem coordenadas. Recadastre para calcular frete.
+                          </p>
+                        )}
+                        {outOfRange && (
+                          <p className="text-xs text-amber-700 mt-1">
+                            Este endereço está fora do nosso raio de entrega.
+                          </p>
+                        )}
+                      </div>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDelete(a.id); }}
+                        className="text-gray-400 hover:text-red-500 p-1"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleDelete(a.id); }}
-                      className="text-gray-400 hover:text-red-500 p-1"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             <button

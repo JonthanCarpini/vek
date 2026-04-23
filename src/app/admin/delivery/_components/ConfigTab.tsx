@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/staff-client';
+import PushConfigCard from './PushConfigCard';
 
 export default function ConfigTab() {
   const [config, setConfig] = useState<any>(null);
@@ -272,6 +273,9 @@ export default function ConfigTab() {
           </div>
         </div>
       </section>
+
+      {/* Push (Web Push / VAPID) */}
+      <PushConfigCard />
 
       {toast && (
         <div className="fixed bottom-4 right-4 bg-gray-800 text-white px-4 py-2 rounded-lg shadow-lg z-50">

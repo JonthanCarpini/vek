@@ -21,6 +21,16 @@ const TAB_ORDER = [
   '/delivery/perfil',
 ];
 
+/** Verifica se o elemento ou algum ancestral tem o atributo data-no-tab-swipe. */
+function hasNoSwipeAncestor(el: Element | null): boolean {
+  let cur: Element | null = el;
+  while (cur && cur !== document.body) {
+    if (cur instanceof HTMLElement && cur.dataset.noTabSwipe != null) return true;
+    cur = cur.parentElement;
+  }
+  return false;
+}
+
 function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -33,14 +43,18 @@ function Shell({ children }: { children: React.ReactNode }) {
   const currentIdx = TAB_ORDER.indexOf(pathname);
   const canSwipe = !hideNav && currentIdx !== -1;
 
+  // Quando o toque inicia dentro de um elemento com [data-no-tab-swipe] (ex: scroll
+  // horizontal de categorias, carrossel, etc.) não mudamos de tab.
   const swipeHandlers = useSwipeable({
-    onSwipedLeft: () => {
+    onSwipedLeft: (e) => {
       if (!canSwipe) return;
+      if (hasNoSwipeAncestor(e.event.target as Element | null)) return;
       const next = TAB_ORDER[currentIdx + 1];
       if (next) router.push(next);
     },
-    onSwipedRight: () => {
+    onSwipedRight: (e) => {
       if (!canSwipe) return;
+      if (hasNoSwipeAncestor(e.event.target as Element | null)) return;
       const prev = TAB_ORDER[currentIdx - 1];
       if (prev) router.push(prev);
     },

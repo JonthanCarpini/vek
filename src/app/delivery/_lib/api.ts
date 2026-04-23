@@ -66,6 +66,11 @@ export const deliveryApi = {
     }),
   getOrder: (id: string) => call<{ order: any }>(`/api/v1/delivery/orders/${id}`),
   listOrders: () => call<{ orders: any[] }>(`/api/v1/delivery/orders`),
+  pushSubscribe: (data: { endpoint: string; p256dh: string; auth: string; userAgent?: string }) =>
+    call<{ id: string }>(`/api/v1/delivery/push/subscribe`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
 };
 
 export function formatBRL(v: number) {
