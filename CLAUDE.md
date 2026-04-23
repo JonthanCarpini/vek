@@ -123,8 +123,12 @@ Four JWT secrets must stay separate:
 | `/cashier` | Session closing & payment |
 | `/admin/*` | Backoffice (login, orders, products, categories, tables, users, reports, settings, whatsapp, ifood, delivery, drivers) |
 | `/display` | Carousel display for screens |
-| `/delivery` | Public delivery/takeout ordering (resolves the active Unit on each VPS — no slug in the URL) |
-| `/t/[id]` | Public order tracking page (no auth, accessed via WhatsApp link) |
+| `/delivery` | App-style delivery home: menu + cart (tab "Início"); stack interno login/address/checkout |
+| `/delivery/pedidos` | Lista de pedidos do cliente (filtro todos/ativos/concluídos + pull-to-refresh) |
+| `/delivery/pedidos/[id]` | Tracking do pedido (reaproveita `OrderTrackingView`) |
+| `/delivery/enderecos` | CRUD de endereços salvos (modal com lookup de CEP) |
+| `/delivery/perfil` | Perfil + logout; se não logado, exibe fluxo OTP (phone → code → name) |
+| `/t/[id]` | Public order tracking page (no auth, accessed via WhatsApp link — usa `OrderTrackingView`) |
 | `/driver/login` | Motoboy login (phone + PIN) |
 | `/driver` | Motoboy dashboard (assigned deliveries, dispatch/deliver actions, Google Maps link) |
 | `/driver/stats` | Motoboy report: today/week/month deliveries, km, avg ticket, commission |
@@ -311,19 +315,36 @@ Self-hosted delivery system — no third-party dependency beyond Google Maps (ge
 
 ### Customer flow (`/delivery`)
 
+**App-style tabbed layout** (`/delivery/layout.tsx`) with shared `DeliveryProvider`, bottom tab nav (4 tabs) and horizontal swipe navigation (`react-swipeable`):
+
 ```
-Load unit config + menu (no slug — active Unit resolved server-side)
-  → [optional] View menu (no login required)
-  → Add items to cart (localStorage-persisted)
-  → Choose orderType: delivery | takeout
-  → Login via WhatsApp OTP (required before checkout)
-  → If delivery: select or add address (ViaCEP autofill + Google geocoding)
-  → Checkout: select payment method (cash/credit/debit/pix/online) → confirm
-  → Track order live via 15s polling of /api/v1/delivery/orders/[id]
-  → Receive WhatsApp notifications on every status change
+┌─ /delivery (tab "Início")
+│    Menu + cart → stack interno (login → address → checkout) → redirect /delivery/pedidos/[id]
+├─ /delivery/pedidos (tab "Pedidos")
+│    Lista de pedidos · filtro Todos/Em andamento/Concluídos · pull-to-refresh · skeleton
+│    └─ /delivery/pedidos/[id] (detalhes) → reaproveita OrderTrackingView (inline=true)
+├─ /delivery/enderecos (tab "Endereços")
+│    Lista + modal novo endereço (lookup CEP via ViaCEP + auto-geocode no POST)
+└─ /delivery/perfil (tab "Perfil")
+     Se logado: avatar + nome + atalhos + logout. Se não: fluxo OTP (phone → code → name opcional)
 ```
 
+**Elementos nativos implementados:**
+- Bottom tab bar fixo com `env(safe-area-inset-bottom)` para iOS notch; ícone ativo em orange-500 com underline top
+- Badge no tab "Pedidos" com contagem de pedidos ativos (`received/accepted/preparing/ready/dispatched`), atualizado via polling 30s no `DeliveryProvider`
+- Swipe horizontal entre tabs: desabilitado em sub-rotas (ex: `/delivery/pedidos/[id]`) via `TAB_ORDER.indexOf(pathname) !== -1`
+- Pull-to-refresh manual (sem lib) em `/delivery/pedidos` via `onTouchStart/Move/End` — recarrega `reloadOrders()` quando dist>60px
+- Sticky header por tab com saudação "Olá, João" (tab Início) ou título da tab
+- Skeleton loading (`Skeleton.tsx` — Card/List) substitui texto "Carregando..." nas listas
+- Cookie `md_customer` (60d) faz session persistir; todas as tabs chamam `/auth/me` via Context e mostram conteúdo logado automaticamente
+
 The landing page `/` offers two entry points: "Escanear Mesa" (in-restaurant QR dine-in) and "Pedir Delivery" (`/delivery`). The delivery button only appears when `deliveryEnabled || takeoutEnabled` is set on the active Unit.
+
+**Tracking unificado:** O componente `src/components/OrderTrackingView.tsx` é a fonte única de UI de tracking. Usado em 2 lugares:
+- `/t/[id]` — página pública compartilhada via WhatsApp (hero com gradient)
+- `/delivery/pedidos/[id]` — dentro da tab Pedidos (modo `inline`, sem hero)
+
+Faz polling 15s + socket `driver.location` / `order.status_changed` / `order.updated` na room `order:{id}`.
 
 ### Key files
 
@@ -337,7 +358,9 @@ The landing page `/` offers two entry points: "Escanear Mesa" (in-restaurant QR 
 | `src/lib/delivery/status.ts` | `updateDeliveryOrderStatus` — single source of truth for status transitions (used by admin + driver routes) |
 | `src/app/delivery/_lib/context.tsx` | React Context orchestrating cart, customer, step navigation |
 | `src/app/delivery/_lib/api.ts` | Client wrapper; `extractError()` normalizes `{error: {message, details}}` responses into plain strings to avoid React #31 |
-| `src/app/delivery/_components/*` | Step components: `MenuStep`, `CartDrawer`, `LoginStep`, `AddressStep`, `CheckoutStep`, `TrackingStep` |
+| `src/app/delivery/_components/*` | Shared: `BottomNav`, `Skeleton`. Stack da tab Início: `MenuStep`, `CartDrawer`, `LoginStep`, `AddressStep`, `CheckoutStep` |
+| `src/app/delivery/{pedidos,enderecos,perfil}/page.tsx` | Páginas das tabs (cada uma consome `useDelivery()` do Provider no layout) |
+| `src/components/OrderTrackingView.tsx` | Componente unificado de tracking (usado por `/t/[id]` público e `/delivery/pedidos/[id]` interno via prop `inline`) |
 
 ### Customer API routes (`/api/v1/delivery/`)
 

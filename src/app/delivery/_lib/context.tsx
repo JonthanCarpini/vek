@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { deliveryApi } from './api';
 
 export type CartItem = {
@@ -12,7 +12,9 @@ export type CartItem = {
   imageUrl?: string | null;
 };
 
-export type Step = 'menu' | 'login' | 'address' | 'checkout' | 'tracking';
+export type Step = 'menu' | 'login' | 'address' | 'checkout';
+
+const ACTIVE_STATUSES = new Set(['received', 'accepted', 'preparing', 'ready', 'dispatched']);
 
 type Ctx = {
   unit: any | null;
@@ -20,6 +22,7 @@ type Ctx = {
   customer: any | null;
   loadingUnit: boolean;
 
+  // Cart
   cart: CartItem[];
   cartSubtotal: number;
   cartCount: number;
@@ -28,6 +31,7 @@ type Ctx = {
   removeFromCart: (productId: string) => void;
   clearCart: () => void;
 
+  // Home-tab internal stack (menu → login → address → checkout)
   step: Step;
   goTo: (s: Step) => void;
 
@@ -36,11 +40,19 @@ type Ctx = {
   selectedAddressId: string | null;
   setSelectedAddressId: (id: string | null) => void;
 
+  // Auth
   loginSuccess: (customer: any) => void;
   logout: () => Promise<void>;
 
-  trackingOrderId: string | null;
-  setTrackingOrderId: (id: string | null) => void;
+  // Shared data across tabs
+  orders: any[];
+  activeOrdersCount: number;
+  loadingOrders: boolean;
+  reloadOrders: () => Promise<void>;
+
+  addresses: any[];
+  loadingAddresses: boolean;
+  reloadAddresses: () => Promise<void>;
 
   reload: () => Promise<void>;
 };
@@ -64,7 +76,10 @@ export function DeliveryProvider({ children }: { children: React.ReactNode }) {
   const [step, setStep] = useState<Step>('menu');
   const [orderType, setOrderType] = useState<'delivery' | 'takeout'>('delivery');
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
-  const [trackingOrderId, setTrackingOrderId] = useState<string | null>(null);
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loadingOrders, setLoadingOrders] = useState(false);
+  const [addresses, setAddresses] = useState<any[]>([]);
+  const [loadingAddresses, setLoadingAddresses] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -97,6 +112,36 @@ export function DeliveryProvider({ children }: { children: React.ReactNode }) {
     try { localStorage.setItem(CART_KEY, JSON.stringify(cart)); } catch {}
   }, [cart]);
 
+  const reloadOrders = useCallback(async () => {
+    if (!customer) { setOrders([]); return; }
+    setLoadingOrders(true);
+    const res = await deliveryApi.listOrders();
+    setLoadingOrders(false);
+    if (res.ok) setOrders(res.data.orders);
+  }, [customer]);
+
+  const reloadAddresses = useCallback(async () => {
+    if (!customer) { setAddresses([]); return; }
+    setLoadingAddresses(true);
+    const res = await deliveryApi.listAddresses();
+    setLoadingAddresses(false);
+    if (res.ok) setAddresses(res.data.addresses);
+  }, [customer]);
+
+  // Auto-load orders/addresses once customer is known
+  useEffect(() => {
+    if (!customer) return;
+    reloadOrders();
+    reloadAddresses();
+  }, [customer, reloadOrders, reloadAddresses]);
+
+  // Poll active orders every 30s to keep the Pedidos badge fresh
+  useEffect(() => {
+    if (!customer) return;
+    const interval = setInterval(reloadOrders, 30_000);
+    return () => clearInterval(interval);
+  }, [customer, reloadOrders]);
+
   const cartSubtotal = useMemo(
     () => cart.reduce((s, i) => s + i.price * i.quantity, 0),
     [cart],
@@ -104,6 +149,10 @@ export function DeliveryProvider({ children }: { children: React.ReactNode }) {
   const cartCount = useMemo(
     () => cart.reduce((s, i) => s + i.quantity, 0),
     [cart],
+  );
+  const activeOrdersCount = useMemo(
+    () => orders.filter((o) => ACTIVE_STATUSES.has(o.status)).length,
+    [orders],
   );
 
   const addToCart = (item: CartItem) => {
@@ -138,6 +187,8 @@ export function DeliveryProvider({ children }: { children: React.ReactNode }) {
     await deliveryApi.logout();
     setCustomer(null);
     setSelectedAddressId(null);
+    setOrders([]);
+    setAddresses([]);
     setStep('menu');
   };
 
@@ -157,7 +208,8 @@ export function DeliveryProvider({ children }: { children: React.ReactNode }) {
     orderType, setOrderType,
     selectedAddressId, setSelectedAddressId,
     loginSuccess, logout,
-    trackingOrderId, setTrackingOrderId,
+    orders, activeOrdersCount, loadingOrders, reloadOrders,
+    addresses, loadingAddresses, reloadAddresses,
     reload,
   };
 

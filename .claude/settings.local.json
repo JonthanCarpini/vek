@@ -15,7 +15,8 @@
       "Read(//c/Program Files/Android/**)",
       "Read(//c/Users/admin/**)",
       "Bash(start \"\" \"C:/Program Files/Android/Android Studio2/bin/studio64.exe\" \"C:/Users/admin/Documents/Projetos/mesa_digital/mobile/admin/android\")",
-      "Bash(where claude *)"
+      "Bash(where claude *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }

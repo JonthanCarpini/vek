@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { ArrowLeft, CreditCard, Banknote, Smartphone, Globe } from 'lucide-react';
 import { useDelivery } from '../_lib/context';
 import { deliveryApi, formatBRL } from '../_lib/api';
@@ -8,9 +9,10 @@ import { deliveryApi, formatBRL } from '../_lib/api';
 type PaymentMethod = 'cash' | 'credit' | 'debit' | 'pix' | 'online';
 
 export default function CheckoutStep() {
+  const router = useRouter();
   const {
     unit, cart, cartSubtotal, goTo, orderType,
-    selectedAddressId, clearCart, setTrackingOrderId,
+    selectedAddressId, clearCart, reloadOrders,
   } = useDelivery();
 
   const [quote, setQuote] = useState<{ fee: number; estimatedMinutes: number; distanceKm: number } | null>(null);
@@ -96,8 +98,10 @@ export default function CheckoutStep() {
       return;
     }
     clearCart();
-    setTrackingOrderId(res.data.order.id);
-    goTo('tracking');
+    goTo('menu');
+    // Atualiza lista de pedidos para atualizar badge e navega para o tracking
+    reloadOrders();
+    router.push(`/delivery/pedidos/${res.data.order.id}`);
   };
 
   return (
