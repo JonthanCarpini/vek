@@ -123,10 +123,13 @@ Four JWT secrets must stay separate:
 | `/cashier` | Session closing & payment |
 | `/admin/*` | Backoffice (login, orders, products, categories, tables, users, reports, settings, whatsapp, ifood, delivery, drivers) |
 | `/display` | Carousel display for screens |
-| `/delivery/[slug]` | Public delivery/takeout ordering (login OTP → address → menu → cart → checkout → tracking) |
+| `/delivery` | Public delivery/takeout ordering (resolves the active Unit on each VPS — no slug in the URL) |
 | `/t/[id]` | Public order tracking page (no auth, accessed via WhatsApp link) |
 | `/driver/login` | Motoboy login (phone + PIN) |
 | `/driver` | Motoboy dashboard (assigned deliveries, dispatch/deliver actions, Google Maps link) |
+| `/driver/stats` | Motoboy report: today/week/month deliveries, km, avg ticket, commission |
+
+**Single-tenant deployment model.** Each restaurant runs on its own VPS/domain/mobile apps. The `/delivery` route, `/api/v1/delivery/*` endpoints and `/api/v1/public/unit` all resolve the single active Unit server-side — no slug/tenant disambiguation at the URL level. The `Tenant`/`Unit` tables still exist for multi-unit-per-tenant scenarios (e.g., chains on one VPS), but the app assumes one active Unit for public traffic.
 
 ### State management
 
@@ -167,7 +170,11 @@ Socket.io rooms are scoped per unit to prevent cross-unit data leakage:
 | `unit:{unitId}:kitchen` | KDS panel |
 | `unit:{unitId}:waiters` | Waiter panel |
 | `unit:{unitId}:dashboard` | Admin dashboard |
-| `session:{sessionId}` | Customer PWA |
+| `session:{sessionId}` | Customer PWA (dine-in) |
+| `driver:{driverId}` | Motoboy dashboard (receives `order.assigned`/`order.unassigned` the instant admin assigns) |
+| `order:{orderId}` | Public tracking `/t/[id]` (receives `driver.location` live while status is `dispatched`) |
+
+`src/lib/socket.ts` exposes `emitToDriver(driverId, event, payload)` and `emitToOrderTracking(orderId, event, payload)`. Never emit from a raw Socket.io instance — always go through these helpers so the room naming stays consistent.
 
 ### Environment variables
 
@@ -302,10 +309,10 @@ KDS status changes flow **back** to iFood (e.g., staff marking "ready" triggers 
 
 Self-hosted delivery system — no third-party dependency beyond Google Maps (geocoding) and WhatsApp (OTP + notifications). Supports delivery and takeout in the same flow.
 
-### Customer flow (`/delivery/[slug]`)
+### Customer flow (`/delivery`)
 
 ```
-Load unit config + menu
+Load unit config + menu (no slug — active Unit resolved server-side)
   → [optional] View menu (no login required)
   → Add items to cart (localStorage-persisted)
   → Choose orderType: delivery | takeout
@@ -316,6 +323,8 @@ Load unit config + menu
   → Receive WhatsApp notifications on every status change
 ```
 
+The landing page `/` offers two entry points: "Escanear Mesa" (in-restaurant QR dine-in) and "Pedir Delivery" (`/delivery`). The delivery button only appears when `deliveryEnabled || takeoutEnabled` is set on the active Unit.
+
 ### Key files
 
 | File | Purpose |
@@ -325,36 +334,44 @@ Load unit config + menu
 | `src/lib/delivery/pricing.ts` | Haversine distance + fee calculation + free-over threshold + out-of-range check |
 | `src/lib/delivery/virtual-table.ts` | Get/create virtual table #9998 + per-order virtual session |
 | `src/lib/delivery/orders.ts` | `createDeliveryOrder` — validates stock, calculates fee, creates `Order(channel='delivery')`, emits to KDS, triggers WhatsApp confirmation |
-| `src/app/delivery/[slug]/_lib/context.tsx` | React Context orchestrating cart, customer, step navigation |
-| `src/app/delivery/[slug]/_components/*` | Step components: `MenuStep`, `CartDrawer`, `LoginStep`, `AddressStep`, `CheckoutStep`, `TrackingStep` |
+| `src/lib/delivery/status.ts` | `updateDeliveryOrderStatus` — single source of truth for status transitions (used by admin + driver routes) |
+| `src/app/delivery/_lib/context.tsx` | React Context orchestrating cart, customer, step navigation |
+| `src/app/delivery/_lib/api.ts` | Client wrapper; `extractError()` normalizes `{error: {message, details}}` responses into plain strings to avoid React #31 |
+| `src/app/delivery/_components/*` | Step components: `MenuStep`, `CartDrawer`, `LoginStep`, `AddressStep`, `CheckoutStep`, `TrackingStep` |
 
 ### Customer API routes (`/api/v1/delivery/`)
 
+All endpoints resolve the active Unit server-side — the client never passes a slug.
+
 | Route | Auth | Purpose |
 |-------|------|---------|
-| `GET /[slug]/info` | none | Public unit metadata (name, logo, delivery config, open status) |
-| `GET /[slug]/menu` | none | Public catalog filtered to active products |
-| `POST /auth/request-otp` | none | Send 6-digit OTP via WhatsApp |
-| `POST /auth/verify-otp` | none | Validate code, upsert `Customer`, set `md_customer` cookie |
-| `GET /auth/me` | customer | Current customer data |
+| `GET /info` | none | Public unit metadata (name, logo, delivery config, open status) |
+| `GET /menu` | none | Public catalog filtered to active products |
+| `POST /auth/request-otp` | none | Send 6-digit OTP via WhatsApp (body: `{ phone }`) |
+| `POST /auth/verify-otp` | none | Validate code, upsert `Customer`, set `md_customer` cookie (body: `{ phone, code, name? }`) |
+| `GET /auth/me` | optional | Returns `{customer: null}` (200) for visitors, `{customer: {...}}` for logged-in. Never 401 — avoids noisy console errors |
 | `POST /auth/me` | customer | Logout (clears cookie) |
 | `POST /quote` | none | Fee + ETA for a given address or lat/lng |
 | `GET /zipcode/[cep]` | none | ViaCEP proxy (free, no quota) |
 | `GET/POST /addresses` | customer | List / create addresses (auto-geocodes on create) |
 | `DELETE /addresses/[id]` | customer | Delete address |
 | `GET/POST /orders` | customer | List customer orders / create new order |
-| `GET /orders/[id]` | none (guess-resistant cuid) | Tracking details (also used by public `/t/[id]`) |
+| `GET /orders/[id]` | none (guess-resistant cuid) | Tracking details (also used by public `/t/[id]`); driver lat/lng only included when status is `dispatched` |
 
 ### Admin API routes (`/api/v1/admin/`)
 
 | Route | Role | Purpose |
 |-------|------|---------|
-| `GET/PATCH /delivery` | admin/manager | Unit delivery config (slug, origin coords, Google key, rates, radius) |
+| `GET/PATCH /delivery` | admin/manager | Unit delivery config (origin coords, Google key, rates, radius) — no slug field |
 | `GET /delivery/orders` | staff | List delivery orders (filter by status) + counts by status |
 | `POST /delivery/orders/[id]/status` | staff | Change status (triggers WhatsApp notification to customer) |
-| `POST /delivery/orders/[id]/assign-driver` | staff | Assign/unassign motoboy |
-| `GET/POST /drivers` | admin/manager | List / create motoboys (with bcrypt-hashed PIN) |
+| `POST /delivery/orders/[id]/assign-driver` | staff | Assign/unassign motoboy. Emits `order.assigned`/`order.unassigned` to the driver room so the motoboy app updates instantly |
+| `GET/POST /drivers` | admin/manager | List / create motoboys (with bcrypt-hashed PIN, optional commission settings) |
 | `PATCH/DELETE /drivers/[id]` | admin/manager | Update / soft-delete motoboy (preserves history) |
+
+### Error response shape
+
+All API handlers go through `src/lib/api.ts`. Failures return `{ error: { message, details? } }` with the appropriate status. The delivery client (`src/app/delivery/_lib/api.ts`) normalizes this into a plain string via `extractError()` before passing to `setError()` — **do not call `setError(res.error)` with raw body**, it'll crash React with error #31.
 
 ### Fee calculation
 
@@ -390,14 +407,13 @@ Triggered from `/api/v1/admin/delivery/orders/[id]/status` — fire-and-forget `
 
 ### Setup checklist (per unit)
 
-1. `/admin/delivery` → set `slug` (URL: `/delivery/<slug>`)
-2. Set origin `addressLat` + `addressLng` (link in UI opens Google Maps)
-3. Paste `googleMapsApiKey` (Geocoding API enabled)
-4. Configure rates (`deliveryBaseFee`, `deliveryFeePerKm`, `deliveryMaxRadiusKm`, `deliveryMinOrder`, optional `deliveryFreeOver`)
-5. Set prep/avg times
-6. Toggle `deliveryEnabled` and/or `takeoutEnabled`
-7. `/admin/whatsapp` → connect WhatsApp (OTP + notifications require it)
-8. `/admin/drivers` → add motoboys with PIN
+1. `/admin/delivery` → set origin `addressLat` + `addressLng` (link in UI opens Google Maps). **These must match the real restaurant location** — the haversine distance check uses them, and wrong coords cause legitimate orders to return `400 "fora da área"`
+2. Paste `googleMapsApiKey` (Geocoding API enabled)
+3. Configure rates (`deliveryBaseFee`, `deliveryFeePerKm`, `deliveryMaxRadiusKm`, `deliveryMinOrder`, optional `deliveryFreeOver`)
+4. Set prep/avg times
+5. Toggle `deliveryEnabled` and/or `takeoutEnabled`
+6. `/admin/whatsapp` → connect WhatsApp (OTP + notifications require it)
+7. `/admin/drivers` → add motoboys with PIN (and optional commission)
 
 ### Driver (Motoboy) area
 
@@ -405,7 +421,11 @@ Simple PWA-like area for delivery drivers. Login with phone + PIN (no WhatsApp O
 
 **Pages:**
 - `/driver/login` — phone + PIN form, checks session first and redirects to `/driver` if already logged in
-- `/driver` — dashboard with two tabs (Active / History), auto-refresh every 20s, Google Maps "Open directions" button, WhatsApp/phone links, item details
+- `/driver` — dashboard with two tabs (Active / History). Socket-driven (joins `driver:{driverId}` room); 60s polling is a fallback. Audio beep + browser notification on new assignments. "Despachar todos" button when 2+ ready orders. Google Maps directions link, WhatsApp/phone links, item details
+- `/driver/stats` — today/week/month summary: count, km rodados, ticket médio, receita, and calculated commission. Also shows the driver's commission config
+
+**Real-time geolocation:**
+While the driver has at least one `dispatched` order, the `/driver` page runs `navigator.geolocation.watchPosition` with a 10s throttle and PUTs `/api/v1/driver/location` with `{lat, lng}`. The endpoint writes `Driver.currentLat/Lng/lastLocationAt` and emits `driver.location` to each active `order:{id}` room. The public tracking page `/t/[id]` listens for that event and shows "Motoboy a X km de você" + a stale indicator + a Google Maps directions link. Location is only exposed to the customer while the order is `dispatched`.
 
 **API routes (`/api/v1/driver/`):**
 
@@ -416,12 +436,17 @@ Simple PWA-like area for delivery drivers. Login with phone + PIN (no WhatsApp O
 | `POST /auth/me` | Logout (clears cookie) |
 | `GET /orders?status=active\|history` | Lists orders where `driverId=me`. Active = `ready+dispatched`; History = last 30 `delivered+cancelled` |
 | `POST /orders/[id]/status` | Driver-only transitions: `ready→dispatched` and `dispatched→delivered`. Validates ownership via `driverId`. Uses shared `updateDeliveryOrderStatus` helper |
+| `PUT /location` | Update driver's live GPS. Writes to `Driver` and emits `driver.location` to every `order:{id}` room the driver currently has `dispatched` |
+| `GET /stats` | Summaries for today/week/month + commission config |
 
 **Status transition rules (enforced server-side):**
 - Driver can only act on orders where `driverId === me`
 - `dispatched` requires current status `ready`
 - `delivered` requires current status `dispatched`
 - Any other transition returns 400
+
+**Commission model:**
+Each `Driver` can have `commissionPerDelivery` (fixed R$) and/or `commissionPercent` (% of `deliveryFee`). Both can coexist — the stats page sums them. Config is set in `/admin/drivers` on create or edit. Fields are optional (null → no commission).
 
 **Shared helper `src/lib/delivery/status.ts`:**
 `updateDeliveryOrderStatus({ orderId, status, reason?, expectedUnitId? })` — single source of truth for status changes. Used by both `/api/v1/admin/delivery/orders/[id]/status` and `/api/v1/driver/orders/[id]/status`. Handles timestamps, driver stats increment, virtual session closing (when cancelled), socket emits, and WhatsApp customer notification.
@@ -433,3 +458,31 @@ UI already exposes `'online'` method but backend is stubbed. To finish:
 2. On `createDeliveryOrder` with `paymentMethod='online'`, call gateway (PIX QR or cart link), store `paymentExternalId`, keep `status='received'` + `paymentStatus='pending'`
 3. Webhook at `/api/v1/webhooks/asaas` or `/mp` validates signature, sets `paymentStatus='paid'`, **then** emits to KDS (similar to offline flow)
 4. UI: show QR code + "awaiting payment" until webhook completes
+
+---
+
+## Mobile APKs (Capacitor)
+
+Each role ships as a thin Capacitor wrapper that loads the production URL inside a WebView. No JS is bundled in the APK — all updates ship via web deploy.
+
+### Projects under `mobile/`
+
+| Folder | `appId` | Points to | Notes |
+|--------|---------|-----------|-------|
+| `mobile/admin` | `site.espetinhodochef.admin` | `/admin` | Backoffice |
+| `mobile/waiter` | `site.espetinhodochef.waiter` | `/waiter` | Garçom |
+| `mobile/driver` | `site.espetinhodochef.driver` | `/driver` | Motoboy (requires GPS permission at runtime for live location) |
+| `mobile/customer` | `site.espetinhodochef.customer` | `/` | Cliente (landing with QR scan + delivery buttons). Manifest declares `CAMERA` permission for the QR scanner |
+
+### Build flow
+
+Each project has `capacitor.config.ts` (with `server.url` pointing to production), a minimal `www/index.html` (never loaded in practice), and a signed Android project in `android/`.
+
+```bash
+cd mobile/<role> && npx cap sync android && cd android && ./gradlew assembleRelease
+# APK output: android/app/build/outputs/apk/release/app-release.apk
+```
+
+All four APKs share the same keystore (copied from `mobile/admin/android/app/admin-key.jks`), with alias `admin-key` and password `MesaDigital@2025`. Each project renames the keystore file locally (`driver-key.jks`, `customer-key.jks`, etc.) but the alias/password stay the same so updates keep the same package signature.
+
+**To add a new role APK:** copy an existing folder, edit `appId`/`appName`/`server.url` in `capacitor.config.ts` and `applicationId`/`namespace` in `android/app/build.gradle`, run `npm install` + `npx cap add android`, copy the keystore, configure `signingConfigs.release`, then build.
