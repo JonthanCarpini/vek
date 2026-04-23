@@ -350,6 +350,8 @@ Faz polling 15s + socket `driver.location` / `order.status_changed` / `order.upd
 
 **Geolocalização do motoboy:** O `/driver/page.tsx` usa `navigator.geolocation.watchPosition` (high accuracy) enquanto existe pedido `dispatched`, com throttle de 10s, enviando para `PUT /api/v1/driver/location`. O backend emite `driver.location` na room `order:{id}` para que o cliente veja o pin se mover em tempo real.
 
+**Tema claro escopado:** O `body` global usa `color: #ededf3` (dark para admin). Para o app delivery funcionar com cartões brancos e texto legível, o `@/Users/admin/Documents/Projetos/mesa_digital/src/app/delivery/layout.tsx` aplica `bg-gray-50 text-gray-800` no wrapper raiz, sobrescrevendo a herança. Qualquer `<h1>`, `<h2>`, `<label>`, `<textarea>` sem classe explícita fica cinza escuro. Elementos com classe (`text-gray-500`, `text-orange-600`) continuam intocados.
+
 **Push Notifications (Web Push / VAPID):**
 - **Schema:** `Unit.pushVapidPublicKey/PrivateKey/Subject` + tabela `PushSubscription(endpoint @unique, p256dh, auth, customerId?)` → `@/Users/admin/Documents/Projetos/mesa_digital/prisma/schema.prisma`
 - **Gerador de chaves:** admin acessa Delivery → config → card "Notificações Push (VAPID)" e gera com 1 clique (`POST /api/v1/admin/delivery/push-config`) OU cola manualmente (`PATCH`). Private key é write-only.
@@ -368,12 +370,18 @@ Faz polling 15s + socket `driver.location` / `order.status_changed` / `order.upd
 | `src/lib/delivery/pricing.ts` | Haversine distance + fee calculation + free-over threshold + out-of-range check |
 | `src/lib/delivery/virtual-table.ts` | Get/create virtual table #9998 + per-order virtual session |
 | `src/lib/delivery/orders.ts` | `createDeliveryOrder` — validates stock, calculates fee, creates `Order(channel='delivery')`, emits to KDS, triggers WhatsApp confirmation |
-| `src/lib/delivery/status.ts` | `updateDeliveryOrderStatus` — single source of truth for status transitions (used by admin + driver routes) |
-| `src/app/delivery/_lib/context.tsx` | React Context orchestrating cart, customer, step navigation |
+| `src/lib/delivery/status.ts` | `updateDeliveryOrderStatus` — single source of truth for status transitions (used by admin + driver routes). Dispara sockets + WhatsApp + push |
+| `src/lib/delivery/push.ts` | `sendPushToCustomer`, `generateVapidKeys`, `statusPushTemplates`. Usa lib `web-push`. Remove automaticamente subscriptions com endpoint 410/404 |
+| `src/app/delivery/_lib/context.tsx` | React Context orchestrating cart, customer, step navigation + integração com `history.pushState/popstate` para back button do mobile |
 | `src/app/delivery/_lib/api.ts` | Client wrapper; `extractError()` normalizes `{error: {message, details}}` responses into plain strings to avoid React #31 |
-| `src/app/delivery/_components/*` | Shared: `BottomNav`, `Skeleton`. Stack da tab Início: `MenuStep`, `CartDrawer`, `LoginStep`, `AddressStep`, `CheckoutStep` |
+| `src/app/delivery/_lib/push.ts` | Registra service worker `/sw-push.js`, pede permissão, subscribe via `PushManager`, envia ao backend. Converte VAPID base64url → Uint8Array |
+| `src/app/delivery/_components/*` | Shared: `BottomNav`, `Skeleton`, `PushToggle`. Stack da tab Início: `MenuStep` (scroll-spy via IntersectionObserver), `CartDrawer`, `LoginStep`, `AddressStep` (pré-check quote com badges de raio), `CheckoutStep` |
 | `src/app/delivery/{pedidos,enderecos,perfil}/page.tsx` | Páginas das tabs (cada uma consome `useDelivery()` do Provider no layout) |
-| `src/components/OrderTrackingView.tsx` | Componente unificado de tracking (usado por `/t/[id]` público e `/delivery/pedidos/[id]` interno via prop `inline`) |
+| `src/app/admin/delivery/_components/PushConfigCard.tsx` | UI admin para gerar/colar chaves VAPID com 1 clique, com contagem de devices inscritos |
+| `src/app/admin/orders/page.tsx` | **Página unificada de pedidos** — filtros por canal (Mesa/Delivery/iFood) com contadores, filtro de status, busca, cards expansíveis com endereço, entregador, pagamento, link Google Maps |
+| `src/components/OrderTrackingView.tsx` | Componente unificado de tracking (usado por `/t/[id]` público e `/delivery/pedidos/[id]` interno via prop `inline`). Inclui `LiveDeliveryMap` quando status=dispatched |
+| `src/components/LiveDeliveryMap.tsx` | Mapa Leaflet + OpenStreetMap (carregado via `next/dynamic({ ssr: false })`). Pins 🛵/🏠, polyline, auto-fit bounds. Custo zero |
+| `public/sw-push.js` | Service worker registrado em `/delivery` scope. Trata eventos `push` (mostra Notification) e `notificationclick` (navega/foca `/delivery/pedidos/[id]`) |
 
 ### Customer API routes (`/api/v1/delivery/`)
 
@@ -393,21 +401,40 @@ All endpoints resolve the active Unit server-side — the client never passes a 
 | `DELETE /addresses/[id]` | customer | Delete address |
 | `GET/POST /orders` | customer | List customer orders / create new order |
 | `GET /orders/[id]` | none (guess-resistant cuid) | Tracking details (also used by public `/t/[id]`); driver lat/lng only included when status is `dispatched` |
+| `GET /push/config` | none | Retorna VAPID public key da unit ativa (`{enabled, publicKey}`). Consumido pelo `PushToggle` |
+| `POST /push/subscribe` | customer | Registra/upsert uma `PushSubscription` (por endpoint) |
+| `POST /push/unsubscribe` | none | Remove subscription pelo endpoint (sem auth para permitir cleanup quando o browser revoga) |
 
 ### Admin API routes (`/api/v1/admin/`)
 
 | Route | Role | Purpose |
 |-------|------|---------|
+| `GET /orders?status=<status\|all>&channel=<dine-in\|delivery\|ifood\|all>&limit=N` | any staff | **Unified orders list** — retorna campos enriquecidos (channel, orderType, deliveryAddress, deliveryLat/Lng, distanceKm, driver, paymentMethod/Status, deliveryFee, customerName/Phone). Normaliza `Decimal → number`. Usado pela página `/admin/orders` redesenhada |
 | `GET/PATCH /delivery` | admin/manager | Unit delivery config (origin coords, Google key, rates, radius) — no slug field |
 | `GET /delivery/orders` | staff | List delivery orders (filter by status) + counts by status |
-| `POST /delivery/orders/[id]/status` | staff | Change status (triggers WhatsApp notification to customer) |
+| `POST /delivery/orders/[id]/status` | staff | Change status (triggers WhatsApp + **push** notification to customer) |
 | `POST /delivery/orders/[id]/assign-driver` | staff | Assign/unassign motoboy. Emits `order.assigned`/`order.unassigned` to the driver room so the motoboy app updates instantly |
 | `GET/POST /drivers` | admin/manager | List / create motoboys (with bcrypt-hashed PIN, optional commission settings) |
 | `PATCH/DELETE /drivers/[id]` | admin/manager | Update / soft-delete motoboy (preserves history) |
+| `GET/PATCH/POST /delivery/push-config` | admin/manager | Gerenciar VAPID keys da unit (GET retorna public+subject+contagem de subs, PATCH salva chaves manuais, POST gera par novo) |
 
 ### Error response shape
 
 All API handlers go through `src/lib/api.ts`. Failures return `{ error: { message, details? } }` with the appropriate status. The delivery client (`src/app/delivery/_lib/api.ts`) normalizes this into a plain string via `extractError()` before passing to `setError()` — **do not call `setError(res.error)` with raw body**, it'll crash React with error #31.
+
+### Decimal serialization (IMPORTANT)
+
+Prisma serializa colunas `Decimal` como **string** no JSON. Qualquer endpoint que retorne `total`, `subtotal`, `deliveryFee`, `distanceKm`, `unitPrice`, `totalPrice`, `changeFor`, `deliveryLat/Lng` etc. **deve normalizar com `Number(x)` antes de retornar** — senão chamadas client-side como `.toFixed()` ou `.toLocaleString()` com options crasham o app inteiro. Padrão já aplicado em `/api/v1/admin/orders`, `/api/v1/admin/delivery/orders`, `/api/v1/driver/orders`. Ao criar novos endpoints que exponham `Order`, siga o mesmo pattern (ou reaproveite um helper `serializeOrder` compartilhado).
+
+### Página `/admin/orders` (unificada)
+
+Única interface para **todos** os pedidos (mesa, delivery, iFood). Substitui a antiga lista simples.
+- **Filtros:** chips por canal com contadores ativos em tempo real + pills de status (Em andamento/Recebidos/Confirmados/Em preparo/Prontos/Saíram/Entregues/Todos) + busca global (#número, nome, telefone, endereço)
+- **Cards:** badge de canal colorido, badge de status, cliente, telefone, endereço truncado + entregador quando delivery. Ao expandir mostra itens, pagamento, endereço completo com link Google Maps, WhatsApp/tel links, observações
+- **Atribuição de motoboy:** dropdown inline só aparece para `orderType=delivery` em status `accepted..dispatched`. Mensagem com link `/admin/drivers` se não houver nenhum cadastrado
+- **Transições de status contextuais:** o botão "→ próximo" escolhe o endpoint certo conforme canal — `delivery`/`ifood` → `/api/v1/admin/delivery/orders/[id]/status` (dispara push + WhatsApp); `dine-in` → `/api/v1/kitchen/orders/[id]/status`. Fluxos distintos: dine-in termina `ready→delivered`; delivery tem `ready→dispatched→delivered`
+- **Realtime:** socket em `order.created|updated|status_changed` recarrega a lista; polling 20s como fallback
+- **Robustez:** fallback defensivo para `channel` desconhecido (evita `TypeError` em pedidos legados sem o campo)
 
 ### Fee calculation
 
