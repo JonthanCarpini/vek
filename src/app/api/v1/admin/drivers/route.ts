@@ -56,10 +56,10 @@ const createSchema = z.object({
   name: z.string().trim().min(2).max(80),
   phone: z.string().trim().min(10).max(20),
   vehicle: z.enum(['moto', 'bike', 'carro', 'pe']).default('moto'),
-  licensePlate: z.string().trim().max(10).optional(),
+  licensePlate: z.string().trim().max(10).nullable().optional(),
   pin: z.string().trim().regex(/^\d{4,6}$/, 'PIN deve ter 4-6 dígitos').optional(),
-  commissionPerDelivery: z.number().nonnegative().optional(),
-  commissionPercent: z.number().min(0).max(100).optional(),
+  commissionPerDelivery: z.number().nonnegative().nullable().optional(),
+  commissionPercent: z.number().min(0).max(100).nullable().optional(),
 });
 
 export async function POST(req: NextRequest) {
