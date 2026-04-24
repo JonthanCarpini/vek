@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
     if (!g.staff.unitId) return fail('Usuário sem unidade', 400);
 
     const sessions = await prisma.tableSession.findMany({
-      where: { unitId: g.staff.unitId, status: 'active' },
+      where: { unitId: g.staff.unitId, status: 'active', table: { virtual: false } },
       orderBy: { openedAt: 'asc' },
       include: {
         table: { select: { id: true, number: true, label: true, status: true } },

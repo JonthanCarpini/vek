@@ -65,6 +65,21 @@ class WhatsAppService {
       if (globalThis.__io) {
         globalThis.__io.to(`unit:${unitId}:dashboard`).emit('whatsapp.status', { status: 'disconnected' });
       }
+
+      // Auto-reconecta após 30s, salvo se foi logout manual
+      if (reason !== 'LOGOUT') {
+        setTimeout(async () => {
+          try {
+            const unit = await (prisma.unit as any).findUnique({ where: { id: unitId } });
+            if (unit?.whatsappEnabled && !this.clients.has(unitId)) {
+              console.log(`[WhatsApp] Auto-reconectando unidade: ${unitId}`);
+              await this.initialize(unitId);
+            }
+          } catch (e) {
+            console.error(`[WhatsApp] Falha na auto-reconexão de ${unitId}:`, e);
+          }
+        }, 30_000);
+      }
     });
 
     this.clients.set(unitId, client);

@@ -153,11 +153,16 @@ Tenant → Unit → TableEntity → TableSession → Order → OrderItem
               ↘ StoreDay → SessionPayment
               ↘ Customer → DeliveryAddress
                          ↘ Order (delivery/takeout)
+                         ↘ FcmToken (FCM push tokens per unit)
               ↘ Driver → Order (delivery assignments)
               ↘ OtpCode (WhatsApp login codes)
               ↘ GeocodeCache (Google Maps cache)
               ↘ IfoodToken / IfoodEvent
+              ↘ PushSubscription (Web Push VAPID subscriptions)
+              ↘ FcmToken (FCM tokens — also linked to Customer)
 ```
+
+`FcmToken` stores FCM device tokens registered by the customer APK. Created/upserted via `POST /api/v1/delivery/fcm`. Dead tokens (404/410 from FCM) are auto-cleaned on next send.
 
 `Order.channel` (`dine_in | ifood | delivery`) and `Order.orderType` (`dine_in | delivery | takeout`) distinguish order sources. Delivery/iFood orders use a **virtual table** (`TableEntity.virtual = true`, number `9998` for delivery, `9999` for iFood) to preserve referential integrity with `tableId`/`sessionId`.
 
@@ -192,12 +197,15 @@ JWT_CUSTOMER_SECRET         # Delivery customer login
 JWT_DRIVER_SECRET           # Motoboy login
 NEXT_PUBLIC_APP_URL         # Must be browser-accessible
 NEXT_PUBLIC_SOCKET_URL      # Must be browser-accessible (WebSocket upgrade)
+FIREBASE_SERVICE_ACCOUNT    # Firebase Admin SDK credentials (JSON string) for FCM push notifications
 
 # Optional (per-unit override takes precedence)
 GOOGLE_MAPS_API_KEY         # Fallback geocoding key (each Unit can have its own)
 IFOOD_CLIENT_ID             # Fallback iFood credentials (each Tenant can have its own)
 IFOOD_CLIENT_SECRET
 ```
+
+**IMPORTANT — `docker-compose.prod.yml` has an explicit env whitelist.** Any new env var added to `.env` on the VPS **must also be listed** in the `environment:` section of the `app` service in `docker-compose.prod.yml`. Currently whitelisted: `DATABASE_URL`, `JWT_SECRET`, `JWT_SESSION_SECRET`, `JWT_CUSTOMER_SECRET`, `JWT_DRIVER_SECRET`, `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SOCKET_URL`, `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`, `FIREBASE_SERVICE_ACCOUNT`. Missing it causes the var to be silently absent inside the container even if it's in `.env`.
 
 `NEXT_PUBLIC_*` vars are bundled into the frontend JS at build time. Per-unit/per-tenant DB overrides for iFood credentials and Google Maps key always take precedence over env fallbacks.
 
@@ -513,6 +521,19 @@ Each `Driver` can have `commissionPerDelivery` (fixed R$) and/or `commissionPerc
 
 **Shared helper `src/lib/delivery/status.ts`:**
 `updateDeliveryOrderStatus({ orderId, status, reason?, expectedUnitId? })` — single source of truth for status changes. Used by both `/api/v1/admin/delivery/orders/[id]/status` and `/api/v1/driver/orders/[id]/status`. Handles timestamps, driver stats increment, virtual session closing (when cancelled), socket emits, and WhatsApp customer notification.
+
+### FCM Push Notifications (native APK)
+
+**How it works:**
+- Customer APK (`mobile/customer`) uses `@capacitor/push-notifications` plugin (added in `package.json` of `mobile/customer`, NOT the main `package.json`).
+- The plugin accesses `window.Capacitor.Plugins.PushNotifications` bridge at runtime — no npm import needed in Next.js code, avoiding webpack errors.
+- Registration: `src/app/delivery/_lib/capacitor-push.ts` — `registerCapacitorPush(customerId)` is called on login and on app load if already logged in. Sends the FCM token to `POST /api/v1/delivery/fcm`.
+- Sending: `src/lib/delivery/fcm.ts` — lazy-initializes Firebase Admin SDK from `FIREBASE_SERVICE_ACCOUNT` env var. `sendFcmToCustomer({ unitId, customerId, title, body, data })` sends to all registered tokens for that customer+unit.
+- `src/lib/delivery/status.ts` → `notifyCustomerPush()` sends both Web Push (browser) and FCM (APK) on every status change.
+- `src/app/api/v1/kitchen/orders/[id]/status/route.ts` — when `order.channel === 'delivery'`, calls `notifyDeliveryCustomer(orderId, status)` instead of the dine-in WhatsApp path.
+- Dead FCM tokens (404/410 errors) are deleted automatically after a failed send.
+
+**Channel name caveat:** The DB stores `dine_in` but the frontend and API responses use `dine-in` (hyphen). The `GET /api/v1/admin/orders` route maps `dine_in → dine-in` in both the filter (`channelDbMap`) and the response mapping.
 
 ### Online payment (planned)
 

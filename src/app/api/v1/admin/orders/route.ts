@@ -20,9 +20,13 @@ export async function GET(req: NextRequest) {
     const channelParam = req.nextUrl.searchParams.get('channel');
     const limit = Math.min(parseInt(req.nextUrl.searchParams.get('limit') || '100', 10), 500);
 
+    // Frontend usa 'dine-in', DB armazena 'dine_in'
+    const channelDbMap: Record<string, string> = { 'dine-in': 'dine_in' };
+    const channelDb = channelParam ? (channelDbMap[channelParam] ?? channelParam) : null;
+
     const where: any = { unitId };
     if (statusParam && statusParam !== 'all') where.status = statusParam;
-    if (channelParam && channelParam !== 'all') where.channel = channelParam;
+    if (channelDb && channelDb !== 'all') where.channel = channelDb;
 
     const orders = await prisma.order.findMany({
       where,
@@ -44,7 +48,7 @@ export async function GET(req: NextRequest) {
       id: o.id,
       sequenceNumber: o.sequenceNumber,
       status: o.status,
-      channel: o.channel || 'dine-in',
+      channel: (o.channel === 'dine_in' ? 'dine-in' : o.channel) || 'dine-in',
       orderType: o.orderType || null,
       subtotal: Number(o.subtotal ?? 0),
       deliveryFee: Number(o.deliveryFee ?? 0),
