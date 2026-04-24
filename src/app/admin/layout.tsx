@@ -79,6 +79,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [installPrompt, setInstallPrompt] = useState<any>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [storeToggling, setStoreToggling] = useState(false);
 
   function showToast(m: string) { setToast(m); setTimeout(() => setToast(null), 4000); }
 
@@ -159,6 +160,35 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     if (unit?.name) document.title = `${unit.name} — Admin`;
   }, [unit?.primaryColor, unit?.name]);
 
+  async function toggleStore() {
+    if (storeToggling) return;
+    const targetOpen = !statusOpen;
+    const overrideActive = storeState?.override;
+    const msg = overrideActive
+      ? `${targetOpen ? 'Forçar ABERTURA' : 'Forçar FECHAMENTO'} da loja?\n(Override atual "${overrideActive.reason}" será substituído)`
+      : targetOpen ? 'Forçar ABERTURA manual da loja?' : 'Forçar FECHAMENTO manual da loja?';
+    if (!confirm(msg)) return;
+    setStoreToggling(true);
+    try {
+      if (overrideActive) {
+        await apiFetch('/api/v1/admin/store-override', { method: 'DELETE' });
+      }
+      await apiFetch('/api/v1/admin/store-override', {
+        method: 'POST',
+        body: JSON.stringify({
+          type: targetOpen ? 'open' : 'closed',
+          reason: targetOpen ? 'Abertura manual' : 'Fechamento manual',
+        }),
+      });
+      const st = await apiFetch('/api/v1/admin/store-state').catch(() => null);
+      if (st?.state) setStoreState(st.state);
+    } catch (e: any) {
+      alert(e.message || 'Erro ao alterar status');
+    } finally {
+      setStoreToggling(false);
+    }
+  }
+
   async function handleInstall() {
     if (!installPrompt) return;
     installPrompt.prompt();
@@ -204,9 +234,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </button>
           {unit?.logoUrl && <img src={unit.logoUrl} className="w-7 h-7 rounded-full object-cover" alt="" />}
           <span className="font-semibold truncate max-w-[140px] sm:max-w-none">{unit?.name || 'Mesa Digital'}</span>
-          <span className={`px-2 py-1 rounded-lg text-[10px] sm:text-xs font-bold ${statusOpen ? 'bg-green-600' : 'bg-red-600'}`}>
+          <button
+            onClick={toggleStore}
+            disabled={storeToggling}
+            title={storeState?.override ? `Override ativo: ${storeState.override.reason} — clique para remover` : storeState?.reason || 'Clique para alterar status manualmente'}
+            className={`px-2 py-1 rounded-lg text-[10px] sm:text-xs font-bold transition hover:opacity-80 active:scale-95 ${statusOpen ? 'bg-green-600' : 'bg-red-600'} ${storeToggling ? 'opacity-60' : ''}`}
+          >
+            {storeState?.override && <span className="mr-1 opacity-70">⚡</span>}
             {statusOpen ? 'ABERTA' : 'FECHADA'}
-          </span>
+          </button>
         </div>
         <div className="text-[10px] sm:text-xs text-gray-400">
           {storeState?.schedule && (
@@ -226,11 +262,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
         {/* Sidebar */}
         <aside className={`
-          fixed inset-y-0 left-0 w-72 bg-[#0b0b0f] border-r border-[color:var(--border)] p-4 flex flex-col z-50
-          transition-transform duration-300 transform lg:translate-x-0 lg:static lg:inset-auto lg:w-64
+          fixed top-14 bottom-0 left-0 w-72 bg-[#0b0b0f] border-r border-[color:var(--border)] p-4 flex flex-col z-50
+          transition-transform duration-300 transform lg:translate-x-0 lg:static lg:inset-auto lg:w-64 lg:top-auto lg:bottom-auto
           ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
         `}>
-          <div className="text-xl font-bold mb-6 flex items-center gap-3 mt-16 lg:mt-0">
+          <div className="text-xl font-bold mb-6 flex items-center gap-3">
             {unit?.logoUrl ? <img src={unit.logoUrl} className="w-9 h-9 rounded-lg object-cover" alt="" /> : <span className="text-2xl">🍔</span>}
             <span className="truncate">{unit?.name || 'Mesa Digital'}</span>
           </div>

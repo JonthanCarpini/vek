@@ -83,6 +83,19 @@ type StatusFilter = typeof STATUS_FILTERS[number]['value'];
 
 const ACTIVE_STATUSES = ['received', 'accepted', 'preparing', 'ready', 'dispatched'];
 
+// Lê/escreve filtros na URL para persistir entre refreshes
+function readUrlFilters() {
+  if (typeof window === 'undefined') return {};
+  const p = new URLSearchParams(window.location.search);
+  return {
+    status: p.get('status') as StatusFilter || 'active',
+    channel: p.get('channel') as 'all' | Channel || 'all',
+    q: p.get('q') || '',
+    from: p.get('from') || '',
+    to: p.get('to') || '',
+  };
+}
+
 export default function AdminOrdersPage() {
   const [orders, setOrders] = useState<any[]>([]);
   const [drivers, setDrivers] = useState<any[]>([]);
@@ -90,14 +103,42 @@ export default function AdminOrdersPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('active');
   const [channelFilter, setChannelFilter] = useState<'all' | Channel>('all');
   const [search, setSearch] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [urlReady, setUrlReady] = useState(false);
+
+  // Restore filters from URL on mount
+  useEffect(() => {
+    const f = readUrlFilters();
+    setStatusFilter(f.status);
+    setChannelFilter(f.channel);
+    setSearch(f.q);
+    setDateFrom(f.from);
+    setDateTo(f.to);
+    setUrlReady(true);
+  }, []);
+
+  // Persist filters to URL on change
+  useEffect(() => {
+    if (!urlReady) return;
+    const p = new URLSearchParams();
+    if (statusFilter !== 'active') p.set('status', statusFilter);
+    if (channelFilter !== 'all') p.set('channel', channelFilter);
+    if (search) p.set('q', search);
+    if (dateFrom) p.set('from', dateFrom);
+    if (dateTo) p.set('to', dateTo);
+    const qs = p.toString();
+    window.history.replaceState(null, '', qs ? `/admin/orders?${qs}` : '/admin/orders');
+  }, [statusFilter, channelFilter, search, dateFrom, dateTo, urlReady]);
 
   const load = async () => {
     try {
-      // 'active' é tratado no cliente (filtramos por set de status abaixo)
       const qsStatus = statusFilter === 'active' ? 'all' : statusFilter;
-      const qsChannel = channelFilter;
-      const data = await apiFetch(`/api/v1/admin/orders?status=${qsStatus}&channel=${qsChannel}&limit=200`);
+      const qs = new URLSearchParams({ status: qsStatus, channel: channelFilter, limit: '300' });
+      if (dateFrom) qs.set('from', dateFrom);
+      if (dateTo) qs.set('to', dateTo);
+      const data = await apiFetch(`/api/v1/admin/orders?${qs}`);
       setOrders(data.orders || []);
     } catch (e) {
       console.error(e);
@@ -114,9 +155,10 @@ export default function AdminOrdersPage() {
   };
 
   useEffect(() => {
+    if (!urlReady) return;
     setLoading(true);
     load();
-  }, [statusFilter, channelFilter]);
+  }, [statusFilter, channelFilter, dateFrom, dateTo, urlReady]);
 
   useEffect(() => {
     loadDrivers();
@@ -255,43 +297,31 @@ export default function AdminOrdersPage() {
         </div>
       </header>
 
-      {/* Chips de canal + busca */}
+      {/* Chips de canal + busca + data */}
       <div className="flex items-center gap-2 flex-wrap">
-        <ChannelChip
-          active={channelFilter === 'all'}
-          onClick={() => setChannelFilter('all')}
-          label="Todos"
-          count={channelCounts.all}
-        />
-        <ChannelChip
-          active={channelFilter === 'dine-in'}
-          onClick={() => setChannelFilter('dine-in')}
-          label="Mesa"
-          Icon={UtensilsCrossed}
-          count={channelCounts['dine-in']}
-        />
-        <ChannelChip
-          active={channelFilter === 'delivery'}
-          onClick={() => setChannelFilter('delivery')}
-          label="Delivery"
-          Icon={Bike}
-          count={channelCounts.delivery}
-        />
-        <ChannelChip
-          active={channelFilter === 'ifood'}
-          onClick={() => setChannelFilter('ifood')}
-          label="iFood"
-          Icon={ShoppingBag}
-          count={channelCounts.ifood}
-        />
-        <div className="ml-auto relative">
-          <Search className="w-4 h-4 text-gray-500 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por # nome, telefone, endereço"
-            className="input pl-9 w-64"
-          />
+        <ChannelChip active={channelFilter === 'all'} onClick={() => setChannelFilter('all')} label="Todos" count={channelCounts.all} />
+        <ChannelChip active={channelFilter === 'dine-in'} onClick={() => setChannelFilter('dine-in')} label="Mesa" Icon={UtensilsCrossed} count={channelCounts['dine-in']} />
+        <ChannelChip active={channelFilter === 'delivery'} onClick={() => setChannelFilter('delivery')} label="Delivery" Icon={Bike} count={channelCounts.delivery} />
+        <ChannelChip active={channelFilter === 'ifood'} onClick={() => setChannelFilter('ifood')} label="iFood" Icon={ShoppingBag} count={channelCounts.ifood} />
+        <div className="ml-auto flex items-center gap-2 flex-wrap justify-end">
+          {/* Filtro de data */}
+          <div className="flex items-center gap-1.5 text-sm text-gray-400">
+            <span className="text-xs">De</span>
+            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
+              className="input text-sm py-1.5 px-2 w-36 [color-scheme:dark]" />
+            <span className="text-xs">Até</span>
+            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
+              className="input text-sm py-1.5 px-2 w-36 [color-scheme:dark]" />
+            {(dateFrom || dateTo) && (
+              <button onClick={() => { setDateFrom(''); setDateTo(''); }} className="text-xs text-gray-500 hover:text-gray-300">✕</button>
+            )}
+          </div>
+          {/* Busca */}
+          <div className="relative">
+            <Search className="w-4 h-4 text-gray-500 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)}
+              placeholder="# nome, telefone, endereço" className="input pl-9 w-56" />
+          </div>
         </div>
       </div>
 

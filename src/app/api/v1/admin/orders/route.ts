@@ -18,6 +18,8 @@ export async function GET(req: NextRequest) {
 
     const statusParam = req.nextUrl.searchParams.get('status');
     const channelParam = req.nextUrl.searchParams.get('channel');
+    const dateFrom = req.nextUrl.searchParams.get('from');
+    const dateTo = req.nextUrl.searchParams.get('to');
     const limit = Math.min(parseInt(req.nextUrl.searchParams.get('limit') || '100', 10), 500);
 
     // Frontend usa 'dine-in', DB armazena 'dine_in'
@@ -27,6 +29,18 @@ export async function GET(req: NextRequest) {
     const where: any = { unitId };
     if (statusParam && statusParam !== 'all') where.status = statusParam;
     if (channelDb && channelDb !== 'all') where.channel = channelDb;
+    if (dateFrom || dateTo) {
+      // UTC-3 (Brasil): meia-noite BRT = 03:00 UTC
+      where.createdAt = {};
+      if (dateFrom) {
+        where.createdAt.gte = new Date(dateFrom + 'T03:00:00.000Z');
+      }
+      if (dateTo) {
+        const end = new Date(dateTo + 'T03:00:00.000Z');
+        end.setUTCDate(end.getUTCDate() + 1); // próximo dia 03:00 UTC = fim do dia dateTo em BRT
+        where.createdAt.lt = end;
+      }
+    }
 
     const orders = await prisma.order.findMany({
       where,
