@@ -111,11 +111,11 @@ export default function AdminOrdersPage() {
   // Restore filters from URL on mount
   useEffect(() => {
     const f = readUrlFilters();
-    setStatusFilter(f.status);
-    setChannelFilter(f.channel);
-    setSearch(f.q);
-    setDateFrom(f.from);
-    setDateTo(f.to);
+    setStatusFilter((f.status ?? 'active') as StatusFilter);
+    setChannelFilter((f.channel ?? 'all') as 'all' | Channel);
+    setSearch(f.q ?? '');
+    setDateFrom(f.from ?? '');
+    setDateTo(f.to ?? '');
     setUrlReady(true);
   }, []);
 
