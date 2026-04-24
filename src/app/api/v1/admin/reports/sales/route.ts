@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
           channel: true, orderType: true, paymentMethod: true,
           items: { select: { name: true, quantity: true, totalPrice: true } },
         } as any,
-      }) as any[],
+      }) as unknown as any[],
       prisma.order.count({
         where: { unitId, createdAt: { gte: since }, status: 'cancelled' },
       }),
