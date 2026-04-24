@@ -12,6 +12,7 @@ export async function GET(req: NextRequest) {
     const ingredients = await prisma.ingredient.findMany({
       where: { unitId: g.staff.unitId },
       orderBy: { name: 'asc' },
+      include: { _count: { select: { products: true } } },
     });
     return ok({ ingredients });
   } catch (e) { return serverError(e); }

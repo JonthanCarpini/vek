@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { emitToKitchen, emitToWaiters, emitToSession, emitToDashboard, SocketEvents } from '@/lib/socket';
 import { whatsappService } from '@/lib/whatsapp';
 import { formatBRL } from '@/lib/format';
+import { syncProductAvailability } from '@/lib/stock-sync';
 
 export type CreateOrderItemInput = {
   productId: string;
@@ -125,6 +126,10 @@ export async function createOrderFromItems(params: {
       where: { id: sessionId },
       data: { totalAmount: { increment: total } },
     });
+
+    // Auto-deactivate products when any mandatory ingredient runs out
+    await syncProductAvailability(tx, [...needed.keys()]);
+
     return created;
   });
 
@@ -350,6 +355,8 @@ export async function cancelOrderItem(params: { itemId: string; unitId: string; 
         data: { stock: { increment: Number(pi.quantity) * item.quantity } },
       });
     }
+    // Re-enable products that may have been paused due to stock shortage
+    await syncProductAvailability(tx, pis.map((pi: any) => pi.ingredientId));
     // Ajusta totais do pedido
     const upd = await tx.order.update({
       where: { id: item.order.id },
@@ -391,6 +398,7 @@ export async function cancelOrder(params: { orderId: string; unitId: string; rea
 
   const updated = await prisma.$transaction(async (tx: any) => {
     // Restitui estoque de todos os itens ativos
+    const restoredIngredientIds = new Set<string>();
     for (const it of order.items) {
       const pis = await tx.productIngredient.findMany({
         where: { productId: it.productId, optional: false },
@@ -400,8 +408,11 @@ export async function cancelOrder(params: { orderId: string; unitId: string; rea
           where: { id: pi.ingredientId },
           data: { stock: { increment: Number(pi.quantity) * it.quantity } },
         });
+        restoredIngredientIds.add(pi.ingredientId);
       }
     }
+    // Re-enable products that may have been paused due to stock shortage
+    await syncProductAvailability(tx, [...restoredIngredientIds]);
     await tx.orderItem.updateMany({
       where: { orderId, status: { not: 'cancelled' } },
       data: { status: 'cancelled' },

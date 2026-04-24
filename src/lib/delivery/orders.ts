@@ -11,6 +11,7 @@ import { formatBRL } from '@/lib/format';
 import { serializeOrder } from '@/lib/orders';
 import { getOrCreateDeliveryVirtualTable, createDeliverySession } from './virtual-table';
 import { calculateDeliveryFee } from './pricing';
+import { syncProductAvailability } from '@/lib/stock-sync';
 
 export type DeliveryOrderItemInput = {
   productId: string;
@@ -192,6 +193,9 @@ export async function createDeliveryOrder(params: DeliveryOrderInput): Promise<D
     for (const [ingId, n] of needed) {
       await tx.ingredient.update({ where: { id: ingId }, data: { stock: { decrement: n.qty } } });
     }
+
+    // Auto-deactivate products when any mandatory ingredient runs out
+    await syncProductAvailability(tx, [...needed.keys()]);
 
     await tx.tableSession.update({
       where: { id: sessionId },
