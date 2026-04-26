@@ -69,7 +69,7 @@ export default function CheckoutStep() {
     (m) => availableMethods.includes(m.id) || m.id === 'online',
   );
 
-  const isStoreOpen = unit?.state?.isOpen ?? true;
+  const isStoreOpen = unit?.state?.open ?? true;
   const outOfRange = orderType === 'delivery' && !!quote?.outOfRange;
 
   const handleSubmit = async () => {

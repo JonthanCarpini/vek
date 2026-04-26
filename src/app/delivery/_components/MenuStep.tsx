@@ -25,7 +25,7 @@ export default function MenuStep({ onOpenCart }: { onOpenCart: () => void }) {
       .filter((c: any) => c.products.length > 0);
   }, [menu, search]);
 
-  const isOpen = unit?.state?.isOpen ?? true;
+  const isOpen = unit?.state?.open ?? true;
 
   // Scroll-spy: detecta qual categoria está visível no topo e marca como ativa.
   // Usamos IntersectionObserver com rootMargin para antecipar a troca ao rolar.

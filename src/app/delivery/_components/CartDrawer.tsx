@@ -14,7 +14,7 @@ export default function CartDrawer({ open, onClose }: { open: boolean; onClose: 
 
   const minOrder = unit?.deliveryMinOrder || 0;
   const belowMin = orderType === 'delivery' && cartSubtotal < minOrder;
-  const isStoreOpen = unit?.state?.isOpen ?? true;
+  const isStoreOpen = unit?.state?.open ?? true;
 
   const handleNext = () => {
     if (!isStoreOpen || belowMin) return;

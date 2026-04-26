@@ -58,7 +58,7 @@ export default function DeliveryHomePage() {
                   {customer ? `Olá, ${customer.name.split(' ')[0]}` : unit.name}
                 </h1>
                 <p className="text-xs text-gray-500">
-                  {unit.state?.isOpen ? (
+                  {unit.state?.open ? (
                     <span className="text-green-600">● Aberto agora</span>
                   ) : (
                     <span className="text-red-600">● Fechado</span>
