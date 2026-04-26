@@ -18,7 +18,6 @@ export async function GET(req: NextRequest) {
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
       include: {
         category: { select: { name: true } },
-        ingredients: { include: { ingredient: true } },
       },
     });
     return ok({ products });
@@ -33,29 +32,10 @@ export async function POST(req: NextRequest) {
     if (!unitId) return fail('unitId necessário', 400);
     const p = await parseBody(req, productSchema);
     if (!p.ok) return p.res;
-    const { ingredients, ...rest } = p.data as any;
-    const dedup = new Map<string, { quantity: number; optional: boolean }>();
-    if (Array.isArray(ingredients)) {
-      for (const i of ingredients) {
-        if (!i.ingredientId) continue;
-        const qty = Number(i.quantity) || 0;
-        if (qty <= 0) continue;
-        const prev = dedup.get(i.ingredientId);
-        if (prev) dedup.set(i.ingredientId, { quantity: prev.quantity + qty, optional: !!i.optional });
-        else dedup.set(i.ingredientId, { quantity: qty, optional: !!i.optional });
-      }
-    }
+    const { ingredients: _ing, ...rest } = p.data as any;
     const product = await prisma.product.create({
-      data: {
-        ...rest,
-        unitId,
-        ...(dedup.size > 0
-          ? { ingredients: { create: Array.from(dedup.entries()).map(([ingredientId, v]) => ({
-              ingredientId, quantity: v.quantity, optional: v.optional,
-            })) } }
-          : {}),
-      },
-      include: { ingredients: { include: { ingredient: true } } },
+      data: { ...rest, unitId },
+      include: { category: { select: { name: true } } },
     });
     return ok({ product });
   } catch (e) { return serverError(e); }

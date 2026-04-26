@@ -262,6 +262,7 @@ model Product {
   featured           Boolean   @default(false)
   videoUrl           String?
   sortOrder          Int       @default(0)
+  stockCount         Int?      // null = ilimitado; 0 = esgotado; >0 = estoque disponível
   // Integração iFood (Catálogo)
   ifoodItemId        String? // id do item publicado no iFood
   ifoodPublished     Boolean   @default(false)

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { apiFetch } from '@/lib/staff-client';
@@ -132,7 +132,8 @@ export default function AdminOrdersPage() {
     window.history.replaceState(null, '', qs ? `/admin/orders?${qs}` : '/admin/orders');
   }, [statusFilter, channelFilter, search, dateFrom, dateTo, urlReady]);
 
-  const load = async () => {
+  const load = useCallback(async () => {
+    setLoading(true);
     try {
       const qsStatus = statusFilter === 'active' ? 'all' : statusFilter;
       const qs = new URLSearchParams({ status: qsStatus, channel: channelFilter, limit: '300' });
@@ -145,7 +146,11 @@ export default function AdminOrdersPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [statusFilter, channelFilter, dateFrom, dateTo]);
+
+  // Always-current ref — prevents stale closures in interval + socket handlers
+  const loadRef = useRef(load);
+  loadRef.current = load;
 
   const loadDrivers = async () => {
     try {
@@ -156,31 +161,26 @@ export default function AdminOrdersPage() {
 
   useEffect(() => {
     if (!urlReady) return;
-    setLoading(true);
     load();
-  }, [statusFilter, channelFilter, dateFrom, dateTo, urlReady]);
+  }, [load, urlReady]);
 
   useEffect(() => {
     loadDrivers();
-    // Socket — reage a novos pedidos e mudanças de status
     const socket = getSocket();
-    const refresh = () => load();
-    // Atualização patch do lat/lng do motoboy sem full reload (vem em order:{id} E dashboard)
+    // Use loadRef so socket/interval always call the latest load (avoids stale filter closure)
+    const refresh = () => loadRef.current();
     const onDriverLocation = (p: any) => {
       if (!p?.driverId) return;
       setOrders((prev) => prev.map((o) => {
         if (o.driver?.id !== p.driverId) return o;
-        return {
-          ...o,
-          driver: { ...o.driver, currentLat: p.lat, currentLng: p.lng, lastLocationAt: p.at },
-        };
+        return { ...o, driver: { ...o.driver, currentLat: p.lat, currentLng: p.lng, lastLocationAt: p.at } };
       }));
     };
     socket.on('order.created', refresh);
     socket.on('order.updated', refresh);
     socket.on('order.status_changed', refresh);
     socket.on('driver.location', onDriverLocation);
-    const timer = setInterval(load, 20_000);
+    const timer = setInterval(refresh, 20_000);
     return () => {
       socket.off('order.created', refresh);
       socket.off('order.updated', refresh);
@@ -188,7 +188,6 @@ export default function AdminOrdersPage() {
       socket.off('driver.location', onDriverLocation);
       clearInterval(timer);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const filteredOrders = useMemo(() => {

@@ -43,6 +43,7 @@ export const productSchema = z.object({
   tags: z.string().optional().nullable(),
   featured: z.boolean().optional(),
   videoUrl: z.string().max(500).optional().nullable(),
+  stockCount: z.number().int().nonnegative().nullable().optional(),
   ingredients: z.array(z.object({
     ingredientId: z.string().min(1),
     quantity: z.number().positive(),

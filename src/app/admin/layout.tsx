@@ -32,7 +32,6 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: '/admin/products', label: 'Produtos', icon: '🍔', roles: ADMIN_FULL },
       { href: '/admin/categories', label: 'Categorias', icon: '📂', roles: ADMIN_FULL },
-      { href: '/admin/ingredients', label: 'Ingredientes', icon: '🥬', roles: ADMIN_FULL },
     ]
   },
   {
@@ -219,7 +218,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   ].filter(item => filteredGroups.some(g => g.items.some(i => i.href === item.href)));
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="h-screen flex flex-col overflow-hidden">
       <PwaHead manifest="/manifest-admin.json" />
 
       {/* Top Bar */}
@@ -251,7 +250,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
       </div>
 
-      <div className="flex flex-1 relative">
+      <div className="flex flex-1 overflow-hidden relative">
         {/* Mobile Sidebar Overlay */}
         {isSidebarOpen && (
           <div
@@ -262,9 +261,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
         {/* Sidebar */}
         <aside className={`
-          fixed top-14 bottom-0 left-0 w-72 bg-[#0b0b0f] border-r border-[color:var(--border)] p-4 flex flex-col z-50
-          transition-transform duration-300 transform lg:translate-x-0 lg:static lg:inset-auto lg:w-64 lg:top-auto lg:bottom-auto
+          fixed top-14 bottom-0 left-0 w-72 bg-[#0b0b0f] border-r border-[color:var(--border)] p-4 flex flex-col z-50 overflow-y-auto
+          transition-transform duration-300 transform
           ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+          lg:translate-x-0 lg:static lg:inset-auto lg:w-64 lg:top-auto lg:bottom-auto lg:h-full lg:z-auto
         `}>
           <div className="text-xl font-bold mb-6 flex items-center gap-3">
             {unit?.logoUrl ? <img src={unit.logoUrl} className="w-9 h-9 rounded-lg object-cover" alt="" /> : <span className="text-2xl">🍔</span>}
@@ -336,8 +336,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
         </aside>
 
-        {/* Main content — extra bottom padding on mobile for the bottom nav bar */}
-        <main className="flex-1 p-4 sm:p-6 overflow-x-hidden w-full relative pb-24 lg:pb-6">
+        {/* Main content */}
+        <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 pb-24 lg:pb-6">
           <div className="max-w-[1400px] mx-auto">
             {children}
           </div>

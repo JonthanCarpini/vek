@@ -28,39 +28,24 @@ export async function createOrderFromItems(params: {
   const { unitId, sessionId, tableId, items, notes } = params;
 
   const productIds = items.map((i) => i.productId);
-  const products = await prisma.product.findMany({
+  const products: any[] = await (prisma.product as any).findMany({
     where: { id: { in: productIds }, unitId, active: true, available: true },
-    include: {
-      ingredients: { where: { optional: false }, include: { ingredient: true } },
-    },
+    select: { id: true, name: true, price: true, station: true, stockCount: true },
   });
   if (products.length !== productIds.length) {
     return { ok: false, status: 409, message: 'Produto indisponivel' };
   }
 
-  // Agrega ingredientes necessarios
-  const needed = new Map<string, { name: string; qty: number; stock: number; unit: string }>();
+  // Agrega quantidade por produto para validação de estoque
+  const productQty = new Map<string, number>();
   for (const item of items) {
-    const p = products.find((x: any) => x.id === item.productId)!;
-    for (const pi of (p as any).ingredients || []) {
-      const total = Number(pi.quantity) * item.quantity;
-      const cur = needed.get(pi.ingredientId);
-      if (cur) cur.qty += total;
-      else needed.set(pi.ingredientId, {
-        name: pi.ingredient.name,
-        qty: total,
-        stock: Number(pi.ingredient.stock),
-        unit: pi.ingredient.unitOfMeasure,
-      });
-    }
+    productQty.set(item.productId, (productQty.get(item.productId) || 0) + item.quantity);
   }
-  for (const [, n] of needed) {
-    if (n.qty > n.stock) {
-      return {
-        ok: false,
-        status: 409,
-        message: `Estoque insuficiente de "${n.name}" (necessario ${n.qty}${n.unit}, disponivel ${n.stock}${n.unit})`,
-      };
+  for (const [productId, qty] of productQty) {
+    const p = products.find((x: any) => x.id === productId)!;
+    const sc = (p as any).stockCount;
+    if (sc !== null && sc !== undefined && qty > sc) {
+      return { ok: false, status: 409, message: `Estoque insuficiente de "${(p as any).name}" (necessário ${qty}, disponível ${sc})` };
     }
   }
 
@@ -107,28 +92,21 @@ export async function createOrderFromItems(params: {
       include: { items: true, table: true },
     });
 
-    for (const [ingId, n] of needed) {
-      await tx.ingredient.update({
-        where: { id: ingId },
-        data: { stock: { decrement: n.qty } },
-      });
-      await tx.auditLog.create({
-        data: {
-          action: 'stock_deduct',
-          entity: 'Ingredient',
-          entityId: ingId,
-          diff: JSON.stringify({ orderId: created.id, qty: n.qty, reason: 'order_created' }),
-        },
-      });
+    // Decrement stockCount for tracked products
+    const trackedIds: string[] = [];
+    for (const [productId, qty] of productQty) {
+      const p = products.find((x: any) => x.id === productId)!;
+      if ((p as any).stockCount !== null && (p as any).stockCount !== undefined) {
+        await tx.product.update({ where: { id: productId }, data: { stockCount: { decrement: qty } } });
+        trackedIds.push(productId);
+      }
     }
+    if (trackedIds.length) await syncProductAvailability(tx, trackedIds);
 
     await tx.tableSession.update({
       where: { id: sessionId },
       data: { totalAmount: { increment: total } },
     });
-
-    // Auto-deactivate products when any mandatory ingredient runs out
-    await syncProductAvailability(tx, [...needed.keys()]);
 
     return created;
   });
@@ -348,15 +326,11 @@ export async function cancelOrderItem(params: { itemId: string; unitId: string; 
       where: { id: itemId },
       data: { status: 'cancelled', notes: reason ? `[Cancelado: ${reason}]` : item.notes },
     });
-    // Restitui estoque
-    for (const pi of pis) {
-      await tx.ingredient.update({
-        where: { id: pi.ingredientId },
-        data: { stock: { increment: Number(pi.quantity) * item.quantity } },
-      });
+    // Restitui stockCount do produto (se rastreado)
+    if ((await tx.product.findUnique({ where: { id: item.productId }, select: { stockCount: true } }))?.stockCount !== null) {
+      await tx.product.update({ where: { id: item.productId }, data: { stockCount: { increment: item.quantity } } });
+      await syncProductAvailability(tx, [item.productId]);
     }
-    // Re-enable products that may have been paused due to stock shortage
-    await syncProductAvailability(tx, pis.map((pi: any) => pi.ingredientId));
     // Ajusta totais do pedido
     const upd = await tx.order.update({
       where: { id: item.order.id },
@@ -397,22 +371,16 @@ export async function cancelOrder(params: { orderId: string; unitId: string; rea
   if (order.status === 'delivered') return { ok: false, status: 409, message: 'Pedido ja entregue' };
 
   const updated = await prisma.$transaction(async (tx: any) => {
-    // Restitui estoque de todos os itens ativos
-    const restoredIngredientIds = new Set<string>();
+    // Restitui stockCount de todos os produtos ativos (se rastreado)
+    const restoredProductIds = new Set<string>();
     for (const it of order.items) {
-      const pis = await tx.productIngredient.findMany({
-        where: { productId: it.productId, optional: false },
-      });
-      for (const pi of pis) {
-        await tx.ingredient.update({
-          where: { id: pi.ingredientId },
-          data: { stock: { increment: Number(pi.quantity) * it.quantity } },
-        });
-        restoredIngredientIds.add(pi.ingredientId);
+      const prod = await tx.product.findUnique({ where: { id: it.productId }, select: { stockCount: true } });
+      if (prod?.stockCount !== null && prod?.stockCount !== undefined) {
+        await tx.product.update({ where: { id: it.productId }, data: { stockCount: { increment: it.quantity } } });
+        restoredProductIds.add(it.productId);
       }
     }
-    // Re-enable products that may have been paused due to stock shortage
-    await syncProductAvailability(tx, [...restoredIngredientIds]);
+    if (restoredProductIds.size) await syncProductAvailability(tx, [...restoredProductIds]);
     await tx.orderItem.updateMany({
       where: { orderId, status: { not: 'cancelled' } },
       data: { status: 'cancelled' },

@@ -46,32 +46,25 @@ export async function createDeliveryOrder(params: DeliveryOrderInput): Promise<D
 
   if (!items.length) return { ok: false, status: 400, message: 'Pedido vazio' };
 
-  // 1. Validar produtos + estoque (igual dine_in)
+  // 1. Validar produtos + estoque por produto
   const productIds = items.map((i) => i.productId);
-  const products = await prisma.product.findMany({
+  const products: any[] = await (prisma.product as any).findMany({
     where: { id: { in: productIds }, unitId, active: true, available: true },
-    include: { ingredients: { where: { optional: false }, include: { ingredient: true } } },
+    select: { id: true, name: true, price: true, station: true, stockCount: true },
   });
   if (products.length !== productIds.length) {
     return { ok: false, status: 409, message: 'Algum produto está indisponível' };
   }
 
-  const needed = new Map<string, { name: string; qty: number; stock: number; unit: string }>();
+  const productQty = new Map<string, number>();
   for (const item of items) {
-    const p = products.find((x: any) => x.id === item.productId)!;
-    for (const pi of (p as any).ingredients || []) {
-      const total = Number(pi.quantity) * item.quantity;
-      const cur = needed.get(pi.ingredientId);
-      if (cur) cur.qty += total;
-      else needed.set(pi.ingredientId, {
-        name: pi.ingredient.name, qty: total,
-        stock: Number(pi.ingredient.stock), unit: pi.ingredient.unitOfMeasure,
-      });
-    }
+    productQty.set(item.productId, (productQty.get(item.productId) || 0) + item.quantity);
   }
-  for (const [, n] of needed) {
-    if (n.qty > n.stock) {
-      return { ok: false, status: 409, message: `Estoque insuficiente de "${n.name}"` };
+  for (const [productId, qty] of productQty) {
+    const p = products.find((x: any) => x.id === productId)!;
+    const sc = (p as any).stockCount;
+    if (sc !== null && sc !== undefined && qty > sc) {
+      return { ok: false, status: 409, message: `Estoque insuficiente de "${(p as any).name}" (necessário ${qty}, disponível ${sc})` };
     }
   }
 
@@ -114,8 +107,8 @@ export async function createDeliveryOrder(params: DeliveryOrderInput): Promise<D
     // Calcula subtotal para frete grátis
     let subtotalPreview = 0;
     for (const it of items) {
-      const p = products.find((x) => x.id === it.productId)!;
-      subtotalPreview += Number(p.price) * it.quantity;
+      const p = products.find((x: any) => x.id === it.productId)!;
+      subtotalPreview += Number((p as any).price) * it.quantity;
     }
     const quote = await calculateDeliveryFee({
       unitId, customerLat, customerLng, orderSubtotal: subtotalPreview,
@@ -190,12 +183,16 @@ export async function createDeliveryOrder(params: DeliveryOrderInput): Promise<D
       include: { items: true, table: true, customer: true },
     });
 
-    for (const [ingId, n] of needed) {
-      await tx.ingredient.update({ where: { id: ingId }, data: { stock: { decrement: n.qty } } });
+    // Decrement stockCount for tracked products
+    const trackedIds: string[] = [];
+    for (const [productId, qty] of productQty) {
+      const p = products.find((x: any) => x.id === productId)!;
+      if ((p as any).stockCount !== null && (p as any).stockCount !== undefined) {
+        await tx.product.update({ where: { id: productId }, data: { stockCount: { decrement: qty } } });
+        trackedIds.push(productId);
+      }
     }
-
-    // Auto-deactivate products when any mandatory ingredient runs out
-    await syncProductAvailability(tx, [...needed.keys()]);
+    if (trackedIds.length) await syncProductAvailability(tx, trackedIds);
 
     await tx.tableSession.update({
       where: { id: sessionId },
